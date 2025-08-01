@@ -85,3 +85,16 @@ rostopic pub -1 /zhihang2025/first_man/reached std_msgs/Bool "data: true"
 rostopic pub -1 /zhihang2025/third_man/reached std_msgs/Bool "data: true"
 ```
 
+
+
+目前还存在的问题：
+
+阶段一：
+
+- 识别上已经没太大问题，后续考虑把图像中的位置转换成坐标的算法是否还能调优
+- 尝试动态调整飞行速度但没成功，可能考虑直接在QGC中调慢飞行速度
+
+阶段二：
+
+- 根据坐标定位粗略寻找已经基本实现，精确降落还在调试中
+- 新的模型权重刚刚得到，还在测试识别效果如何
