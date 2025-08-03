@@ -85,6 +85,9 @@ class ObjectLocalizationNode:
             rospy.loginfo("Mission end...")
     
     def image_callback(self, msg):
+        if not self.can_start:
+            return
+        
         if self.camera_info is None or self.drone_pose is None:
             rospy.logdebug("Waiting for camera info and drone pose...")
             return
@@ -262,3 +265,4 @@ if __name__ == '__main__':
     finally:
         rospy.loginfo("Object Localization node is shutting down.")
         cv2.destroyAllWindows()
+

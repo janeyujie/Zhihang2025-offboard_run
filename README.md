@@ -1,17 +1,34 @@
 # README
 
+### 环境配置：
+
+```
+pip install ultralytics
+```
+
 需要把该目录放在catkin_ws/src下
 
 （虚拟机连不上github/复制不了整个工作区到windows下面，不然应该传整个工作区上来的
 
 ```bash
-# 使用前需要先
+# 使用前需要
+cd ~/catkin_ws
 catkin build
 ```
 
 
 
-完整的代码启动流程：
+```
+# 四旋翼
+MPC_XY_CRUISE 巡航速度
+MPC_VEL_MANUAL 最大水平速度限制
+# 固定翼
+FW_AIRSPD_TRIM 巡航速度
+```
+
+
+
+### 完整的代码启动流程：
 
 ```bash
 # 如果小人没加载完全的话要重新启动一次
@@ -39,6 +56,12 @@ python3 zhihang_control_targets.py
 cd ~/Downloads
 ./QGroundControl.AppImage
 
+
+# 启动数据记录
+cd ~/XTDrone/zhihang2025
+rosbag record -O score1 /standard_vtol_0/mavros/state /iris_0/mavros/state  /gazebo/model_states /xtdrone/standard_vtol_0/cmd /xtdrone/iris_0/cmd /zhihang/first_point /zhihang2025/first_man/pose /zhihang2025/second_man/pose /zhihang2025/third_man/pose /zhihang2025/iris_healthy_man/pose  /zhihang2025/iris_bad_man/pose  /zhihang/downtown
+
+
 # 阶段一固定翼无人机控制
 cd ~/catkin_ws/src/offboard_run/scripts
 python3 vtol_commander.py
@@ -53,7 +76,7 @@ python3 iris_commander1.py
 
 # 阶段二识别重伤人员和健康人员详细坐标脚本
 source ~/catkin_ws/devel/setup.bash
-rosrun offboard_run detect.py
+rosrun offboard_run detect_red.py
 
 ```
 
