@@ -352,12 +352,44 @@ class ObjectTrackingHoverNode:
 
             # ------------------ 状态机逻辑 ------------------
             self._ensure_offboard_mode()
+            vel = 1.0
+            if self.drone_pose.pose.position.z <= 1.0:
+                if not self.target_pose_published and self.drone_pose.pose.position.z <= 0.5:
+                    self._publish_velocity_command()
+                    pose_msg = Pose()
+                    pose_msg.position.x = self.target['world_coords'][0]
+                    pose_msg.position.y = self.target['world_coords'][1]
+                    pose_msg.position.z = self.target['world_coords'][2]
+                    self.pose_publishers[self.target['type']].publish(pose_msg)
+                    rospy.loginfo(f"SUCCESS: Target '{self.target['type']}' pose published. Hovering at final altitude.")
+                    self.target_pose_published = True
+                    break
+                else:
+                    self._publish_velocity_command(0.0, 0.0, self.descend_speed_ms)
             # 状态1: 搜索目标
             if self.target is None:
                 self.landing_state = "SEARCHING"
                 rospy.loginfo_throttle(2, f"State: {self.landing_state} - No target detected. Hovering.")
-                self.move(self.critial_pose.position.x, self.critial_pose.position.y, 1.0)
-                self.hover()
+                #self.move(self.critial_pose.position.x, self.critial_pose.position.y, 1.0)
+                #self.hover()
+                dx = self.critial_pose.position.x - self.drone_pose.pose.position.x
+                dy = self.critial_pose.position.y - self.drone_pose.pose.position.y
+                dist_to_search = math.sqrt(dx**2 + dy**2)
+                if dist_to_search > 2.0:
+                    rospy.loginfo_throttle(2, f"State: {self.landing_state} - No target. Moving to search pose. Distance: {dist_to_search:.2f}m")
+                    # 使用比例控制，计算世界坐标系下的瞬时速度
+                    vel_x_world = (dx / dist_to_search) * vel
+                    vel_y_world = (dy / dist_to_search) * vel
+                    
+                    # 将世界速度转换为机体速度
+                    forward_vel = vel_x_world * math.cos(self.current_yaw) + vel_y_world * math.sin(self.current_yaw)
+                    leftward_vel = -vel_x_world * math.sin(self.current_yaw) + vel_y_world * math.cos(self.current_yaw)
+                    self._publish_velocity_command(forward_vel, leftward_vel, 0.0)
+                else:
+                    # 到达搜索点附近，悬停等待
+                    rospy.loginfo_throttle(5, f"State: {self.landing_state} - Arrived at search pose. Hovering.")
+                    self._publish_velocity_command()
+                
                 self.control_rate.sleep()
                 continue
 
@@ -371,11 +403,15 @@ class ObjectTrackingHoverNode:
             # error < 0 表示目标在中心的左侧/上方
             error_x_px = target_u - self.camera_center_x
             error_y_px = target_v - self.camera_center_y
+            dx = self.target['world_coords'][0] - self.drone_pose.pose.position.x
+            dy = self.target['world_coords'][1] - self.drone_pose.pose.position.y
+            horizontal_distance = math.sqrt(dx**2 + dy**2)
 
             # 检查是否在中心容忍度范围内
             if (current_altitude <= 2.0):
                 is_aligned = (abs(error_x_px) < self.center_low) and \
                         (abs(error_y_px) < self.center_low)
+                vel = 0.5
             else:
                 is_aligned = (abs(error_x_px) < self.center_tolerance_px) and \
                         (abs(error_y_px) < self.center_tolerance_px)
@@ -394,19 +430,27 @@ class ObjectTrackingHoverNode:
                 
                 # 对准时保持当前高度
                 #self._publish_velocity_command(forward_vel, leftward_vel, 0.0)
-                self.move(self.target['world_coords'][0], self.target['world_coords'][1], 1.0)
+                #self.move(self.target['world_coords'][0], self.target['world_coords'][1], 1.0)
+                vel_x_world = (dx / horizontal_distance) * vel
+                vel_y_world = (dy / horizontal_distance) * vel
+
+                forward_vel = vel_x_world * math.cos(self.current_yaw) + vel_y_world * math.sin(self.current_yaw)
+                leftward_vel = -vel_x_world * math.sin(self.current_yaw) + vel_y_world * math.cos(self.current_yaw)
+                    
+                self._publish_velocity_command(forward_vel, leftward_vel, 0.0)
 
             # 状态3: 垂直下降
             else:
                 # 检查是否已到达最终高度
-                if current_altitude <= self.final_altitude_m:
+                if current_altitude <= 1.0:
                     # 已到达，任务完成，悬停
                     self.landing_state = "LANDED"
                     rospy.loginfo_throttle(5, f"State: {self.landing_state} - Final altitude reached. Hovering.")
                     self.hover()
                     
                     # 发布一次最终姿态
-                    if not self.target_pose_published:
+                    if not self.target_pose_published and current_altitude <= 0.5:
+                        self._publish_velocity_command()
                         pose_msg = Pose()
                         pose_msg.position.x = self.target['world_coords'][0]
                         pose_msg.position.y = self.target['world_coords'][1]
@@ -414,6 +458,9 @@ class ObjectTrackingHoverNode:
                         self.pose_publishers[self.target['type']].publish(pose_msg)
                         rospy.loginfo(f"SUCCESS: Target '{self.target['type']}' pose published. Hovering at final altitude.")
                         self.target_pose_published = True
+                        break
+                    else:
+                        self._publish_velocity_command(0.0, 0.0, self.descend_speed_ms)
                 else:
                     # 未到达最终高度，继续下降
                     self.landing_state = "DESCENDING"
@@ -593,3 +640,4 @@ if __name__ == '__main__':
         rospy.loginfo("Object Tracking Hover node terminated.")
         cv2.destroyAllWindows()
         exit(0)
+
