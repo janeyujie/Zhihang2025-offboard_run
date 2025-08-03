@@ -37,6 +37,7 @@ class Commander:
         self.xtdrone_vel_pub = rospy.Publisher("xtdrone/standard_vtol_0/cmd_vel_flu", Twist, queue_size=10)
         self.xtdrone_cmd_pub = rospy.Publisher("xtdrone/standard_vtol_0/cmd", String, queue_size=10)
         self.waypoint_pub = rospy.Publisher("standard_vtol_0/waypoint_reached", Bool, queue_size=10)
+        self.ending_pub = rospy.Publisher("standard_vtol_0/search_completed", Bool, queue_size=10)
         self.part1_completed_pub = rospy.Publisher("/part1_completed", Bool, queue_size=10)
         
         # --- 服务客户端 ---
@@ -252,13 +253,6 @@ class Commander:
             
             # 只检查水平距离
             if self._distance(self.current_pose.position, target_pose.pose.position) < completion_radius:
-                if self.current_pose.position.x >= 1400 and self.searched == False: 
-                    rospy.loginfo("Reaching waypoint, start to search")
-                    self.searched = True
-                    msg = Bool()
-                    msg.data = True
-                    self.waypoint_pub.publish(msg)
-                
                 start_time = rospy.Time.now()
                 while rospy.Time.now() - start_time < rospy.Duration(2.0):
                     self.setpoint_pos_pub.publish(target_pose)
@@ -390,6 +384,20 @@ class Commander:
                 rospy.loginfo("Switched to LOITER mode successfully.")
         except rospy.ServiceException as e:
             rospy.logerr("Service call for LOITER mode failed: %s" % e)
+            
+    def start_to_search(self):
+        if self.searched == False: 
+            rospy.loginfo("Reaching waypoint, start to search")
+            self.searched = True
+            msg = Bool()
+            msg.data = True
+            self.waypoint_pub.publish(msg)
+            
+    def end_searching(self):
+        rospy.loginfo("Searching mission ended...")
+        msg = Bool()
+        msg.data = True
+        self.ending_pub.publish(msg)
 
 
 if __name__ == "__main__":
@@ -412,6 +420,7 @@ if __name__ == "__main__":
         
         rospy.loginfo("--- Starting Search Mission ---")
         con.change_altitude(10.0)
+        con.start_to_search()
         '''con.move(1450, 250, 12)
         con.move(1460, 250, 12)
         con.move(1460, -250, 12)
@@ -435,6 +444,7 @@ if __name__ == "__main__":
         con.move(1550, 250, 12)'''
         #con.move(1495, -250, 10)
         con.move(1495, 250, 10)
+        con.end_searching()
         #con.move_with_velocity(1495, 250, 10.0, 4)
         
         con.change_altitude(40.0)

@@ -27,7 +27,7 @@ class ObjectLocalizationNode:
         self.camera_info = None
         self.drone_pose = None
         self.can_start = False
-        self.ending = True
+        self.ending = False
 
         # 队列保存检测结果
         self.target_queues = {
@@ -49,7 +49,7 @@ class ObjectLocalizationNode:
         # 订阅无人机姿态
         rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
         rospy.Subscriber('standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
-        rospy.Subscriber("/part1_completed", Bool, self._ending_cb)
+        rospy.Subscriber("/standard_vtol_0/search_completed", Bool, self._ending_cb)
         self._init_tf()  # 初始化相机到机体坐标变换矩阵
 
         # 发布3D目标位置和种类
@@ -149,7 +149,7 @@ class ObjectLocalizationNode:
     def publish_smoothed_position(self, object_type, target_position):
         """对目标位置进行滤波平滑处理并发布"""
         queue = self.target_queues[object_type]
-        if object_type == "red" and len(queue) > 3:
+        if object_type == "red" and len(queue) > 5:
             smoothed_position = np.mean(queue, axis=0)
             pose_msg = Pose()
             pose_msg.position.x = smoothed_position[0]
@@ -246,7 +246,14 @@ if __name__ == '__main__':
             rospy.loginfo_throttle(10, "Waiting for signal...")
             rate.sleep()
         rospy.loginfo("Signal received! Starting to detect...")
-        node.run()
+        #node.run()
+        while not rospy.is_shutdown():
+            if node.ending:
+                rospy.loginfo("Ending signal received. Shutting down the node.")
+                rospy.signal_shutdown("Mission part 1 completed, shutdown signal received")
+                break 
+                
+            rate.sleep()
 
     except rospy.ROSInterruptException:
         rospy.loginfo("Node interrupted by user")

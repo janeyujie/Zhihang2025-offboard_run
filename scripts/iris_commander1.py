@@ -100,12 +100,12 @@ class XTDroneController:
         self.healthy_man_pose = msg
         
     def _critical_complete_cb(self, msg):
-        if msg.data:
+        if msg is not null:
             rospy.loginfo("Searching for CRITICAL person completed.")
             self.critical_complete = True
 
     def _healthy_complete_cb(self, msg):
-        if msg.data:
+        if msg is not null:
             rospy.loginfo("Searching for HEALTHY person completed.")
             self.healthy_complete = True
             
@@ -177,7 +177,7 @@ class XTDroneController:
         h = self.current_pose.position.z
         initial_yaw = self.current_yaw
         
-        while self._distance(self.current_pose.position.x, self.current_pose.position.y, x, y) > 2.0:
+        while self._distance(self.current_pose.position.x, self.current_pose.position.y, x, y) > 3.0:
             if rospy.is_shutdown():
                 break
             current_time = rospy.Time.now()
@@ -223,7 +223,7 @@ class XTDroneController:
         target = self.healthy_man_pose.position
         rospy.loginfo("Navigating to HEALTHY person at (%.2f, %.2f)" % (target.x, target.y))
         self.move(target.x, target.y, vel=4)
-        con.change_altitude(3.0)
+        con.change_altitude(5.0)
 
         rospy.loginfo("HEALTHY person reached. Starting to precise landing.")
         self.healthy_man_reached_pub.publish(Bool(True))
@@ -288,12 +288,12 @@ if __name__ == '__main__':
         con.change_altitude(40)
         con.move(1200, -250, 10)
         con.move(1450, -250, 10)
-        con.change_altitude(10)
+        con.change_altitude(12)
         
-        con.moving_to_health()
-        con.change_altitude(10)
+        '''con.moving_to_health()
+        con.change_altitude(12)'''
         con.moving_to_critical()
-        con.change_altitude(10)
+        con.change_altitude(40)
         
         con.move(1450, 250, 10)
         con.move(1200, 250, 10)

@@ -98,3 +98,4 @@ rostopic pub -1 /zhihang2025/third_man/reached std_msgs/Bool "data: true"
 
 - 根据坐标定位粗略寻找已经基本实现，精确降落还在调试中
 - 新的模型权重刚刚得到，还在测试识别效果如何
+- 暂时还没考虑降落时树和人的因素
