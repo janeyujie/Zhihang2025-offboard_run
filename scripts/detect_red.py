@@ -105,7 +105,7 @@ class ObjectTrackingHoverNode:
 
     def _init_subscribers(self):
         # 修改话题名称以适配标准PX4+MAVROS设置
-        vehicle_id = self.vehicle_id  # 或者根据你的设置修改
+        vehicle_id = self.vehicle_id
         
         # 状态订阅 - 使用标准MAVROS话题
         rospy.Subscriber(f'/{vehicle_id}/mavros/state', State, self._state_cb)
@@ -132,8 +132,7 @@ class ObjectTrackingHoverNode:
         rospy.Subscriber('/zhihang2025/first_man/pose', Pose, self._target_pose_cb)
 
     def _init_publishers(self):
-        vehicle_id = self.vehicle_id  # 修改为你的机体ID
-        
+        vehicle_id = self.vehicle_id        
         # 使用标准MAVROS速度控制话题
         self.velocity_pub = rospy.Publisher(f'/{vehicle_id}/mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
         rospy.loginfo("Velocity publisher initialized")
@@ -141,9 +140,6 @@ class ObjectTrackingHoverNode:
         self.cmd_pub = rospy.Publisher(f'/xtdrone/{vehicle_id}/cmd', String, queue_size=1)
         self.mavros_vel_pub = rospy.Publisher(f'/xtdrone/{vehicle_id}/cmd_vel_flu', Twist, queue_size=10)
         rospy.loginfo("MAVROS velocity publisher initialized")
-        # 移除xtdrone相关发布器，因为你使用的是标准PX4+MAVROS
-        # self.cmd_pub = rospy.Publisher('/xtdrone/standard_vtol_0/cmd', String, queue_size=10)
-        
         # 使用标准消息类型替代自定义消息
         self.object_pose_pub = rospy.Publisher('/detected_object_pose', PoseStamped, queue_size=10)
         self.pose_publishers = {
@@ -153,8 +149,7 @@ class ObjectTrackingHoverNode:
         rospy.loginfo("Publishers initialized")
 
     def _init_services(self):
-        vehicle_id = self.vehicle_id  # 修改为你的机体ID
-        
+        vehicle_id = self.vehicle_id        
         try:
             # 等待MAVROS服务
             rospy.wait_for_service(f'{vehicle_id}/mavros/cmd/arming', timeout=5.0)
@@ -621,9 +616,9 @@ class ObjectTrackingHoverNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        v1 = np.array([2.52, 2.67, 0.1])
+        v1 = np.array([2.5, 2.7, 1.3])
         v2 = np.array([0, 0, 0])
-        #drone_position = drone_position + v1 + v2
+        drone_position = drone_position + v1 + v2
         cam_position = drone_position + R_world_body @ cam_offset
 
         # 计算射线与地面的交点

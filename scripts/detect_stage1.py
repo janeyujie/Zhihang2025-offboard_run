@@ -15,13 +15,13 @@ from collections import deque
 
 class ObjectLocalizationNode:
     def __init__(self):
-        rospy.init_node('object_localization_node_stage_2', anonymous=True)
+        rospy.init_node('object_localization_node_stage_1', anonymous=True)
 
         self.bridge = CvBridge()
         
         rospack = rospkg.RosPack()
         pkg_path = rospack.get_path('offboard_run')
-        model_path = os.path.join(pkg_path, 'models', 'best.pt')
+        model_path = os.path.join(pkg_path, 'models', 'stage1.pt')
         self.model = YOLO(model_path)
 
         self.camera_info = None
@@ -48,7 +48,7 @@ class ObjectLocalizationNode:
         rospy.Subscriber('/standard_vtol_0/camera/camera_info', CameraInfo, self.camera_info_callback, queue_size=1)
         # 订阅无人机姿态
         rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
-        rospy.Subscriber('standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
+        rospy.Subscriber('/standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
         rospy.Subscriber("/standard_vtol_0/search_completed", Bool, self._ending_cb)
         self._init_tf()  # 初始化相机到机体坐标变换矩阵
 
@@ -182,15 +182,6 @@ class ObjectLocalizationNode:
     def pixel_to_camera_ray(self, u, v):
         pixel_h = np.array([u, v, 1.0])  # 齐次像素
         ray_cam = np.linalg.inv(self.camera_matrix) @ pixel_h
-        # fx = self.camera_matrix[0, 0]
-        # fy = self.camera_matrix[1, 1]
-        # cx = self.camera_matrix[0, 2]
-        # cy = self.camera_matrix[1, 2]
-
-        # x = (u - cx) / fx
-        # y = (v - cy) / fy
-        # ray = np.array([x, y, 1.0])
-        # rospy.loginfo(f"Pixel coordinates ({u}, {v}) converted to camera ray: {ray}; ray_cam: {ray_cam}")
         return self.normalize(ray_cam)
 
     def camera_ray_to_world(self, ray_cam, orientation):
@@ -220,8 +211,8 @@ class ObjectLocalizationNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        v1 = np.array([2, 0, 1])
-        v2 = np.array([0, 0, -0.5])
+        v1 = np.array([2.3, 0.4, 1.3])
+        v2 = np.array([0, 0, -0.05])
         drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
         # 计算相机在世界坐标系中的位置
         cam_position = drone_position + R_world_body @ cam_offset
@@ -249,7 +240,6 @@ if __name__ == '__main__':
             rospy.loginfo_throttle(10, "Waiting for signal...")
             rate.sleep()
         rospy.loginfo("Signal received! Starting to detect...")
-        #node.run()
         while not rospy.is_shutdown():
             if node.ending:
                 rospy.loginfo("Ending signal received. Shutting down the node.")
