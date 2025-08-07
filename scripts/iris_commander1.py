@@ -100,12 +100,12 @@ class XTDroneController:
         self.healthy_man_pose = msg
         
     def _critical_complete_cb(self, msg):
-        if msg is not null:
+        if msg is not None:
             rospy.loginfo("Searching for CRITICAL person completed.")
             self.critical_complete = True
 
     def _healthy_complete_cb(self, msg):
-        if msg is not null:
+        if msg is not None:
             rospy.loginfo("Searching for HEALTHY person completed.")
             self.healthy_complete = True
             
@@ -232,6 +232,7 @@ class XTDroneController:
         while not rospy.is_shutdown() and self.healthy_complete == False:
             rospy.sleep(1)
         rospy.loginfo("Searching for HEALTHY person completed... Continue to search critical man...")
+        con.change_altitude(12)
 
     def moving_to_critical(self):
         rospy.loginfo("Waiting for CRITICAL person's location...")
@@ -250,6 +251,7 @@ class XTDroneController:
         while not rospy.is_shutdown() and self.critical_complete == False:
             rospy.sleep(1)
         rospy.loginfo("Searching for CRITICAL person completed...")
+        con.change_altitude(40)
     
     def hover(self):
         self.publish_command('HOVER')
@@ -290,10 +292,8 @@ if __name__ == '__main__':
         con.move(1450, -250, 10)
         con.change_altitude(12)
         
-        '''con.moving_to_health()
-        con.change_altitude(12)'''
+        con.moving_to_health()
         con.moving_to_critical()
-        con.change_altitude(40)
         
         con.move(1450, 250, 10)
         con.move(1200, 250, 10)
@@ -302,3 +302,4 @@ if __name__ == '__main__':
         
     except rospy.ROSInterruptException:
         pass
+

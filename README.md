@@ -78,6 +78,9 @@ python3 iris_commander1.py
 source ~/catkin_ws/devel/setup.bash
 rosrun offboard_run detect_red.py
 
+source ~/catkin_ws/devel/setup.bash
+rosrun offboard_run detect_white.py
+
 ```
 
 
@@ -97,11 +100,11 @@ rostopic echo /zhihang2025/second_man/pose
 rostopic echo /zhihang2025/third_man/pose
 
 # 阶段二识别到的重伤人员和健康人员的坐标位置
-rostopic echo /zhihang2025/first_man/pose
-rostopic echo /zhihang2025/third_man/pose
+rostopic echo /zhihang2025/iris_healthy_man/pose
+rostopic echo /zhihang2025/iris_critical_man/pose
 
-rostopic pub -1 /zhihang2025/third_man/pose geometry_msgs/Pose '{position: {x: 1495.0, y: -111.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
-rostopic pub -1 /zhihang2025/first_man/pose geometry_msgs/Pose '{position: {x: 1495.0, y: -105.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
+rostopic pub -1 /zhihang2025/third_man/pose geometry_msgs/Pose '{position: {x: 1495.0, y: -140.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
+rostopic pub -1 /zhihang2025/first_man/pose geometry_msgs/Pose '{position: {x: 1497.0, y: -108.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
 rostopic pub -1 /part1_completed std_msgs/Bool "data: true"
 rostopic pub -1 standard_vtol_0/waypoint_reached std_msgs/Bool "data: true"
 rostopic pub -1 /zhihang2025/first_man/reached std_msgs/Bool "data: true"
@@ -121,4 +124,5 @@ rostopic pub -1 /zhihang2025/third_man/reached std_msgs/Bool "data: true"
 
 - 根据坐标定位粗略寻找已经基本实现，精确降落还在调试中
 - 新的模型权重刚刚得到，还在测试识别效果如何
-- 暂时还没考虑降落时树和人的因素
+- 暂时还没考虑降落时树和人会挡到飞机的因素
+- 坐标系的问题，订阅local_position/pose话题来看无人机当前坐标是有偏移的
