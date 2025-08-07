@@ -65,7 +65,8 @@ class QuadcopterCommander:
     def _image_callback(self, msg):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-            cv2.imshow("Iris Camera", cv_image)
+            resized_image = cv2.resize(cv_image, (0, 0), fx=0.5, fy=0.5)
+            cv2.imshow("Drone Camera", resized_image)
             cv2.waitKey(1)
         except CvBridgeError as e:
             rospy.logerr(e)

@@ -94,6 +94,7 @@ class ObjectLocalizationNode:
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            XTDrone_pose = self.drone_pose # 同步读取数据
         except Exception as e:
             rospy.logerr(f"CvBridge Error: {e}")
             return
@@ -116,7 +117,7 @@ class ObjectLocalizationNode:
                 u_pixel = (x1 + x2) / 2
                 v_pixel = (y1 + y2) / 2
 
-                target_position = self.get_target_position(u_pixel, v_pixel)
+                target_position = self.get_target_position(u_pixel, v_pixel, XTDrone_pose.pose)
                 
                 if target_position is not None and conf > 0.8:  # 置信度阈值
                     found_target = True
@@ -193,7 +194,7 @@ class ObjectLocalizationNode:
         ray_world = R_world_body @ ray_body
         return self.normalize(ray_world)
 
-    def get_target_position(self, u, v, ground_z=0.0):
+    def get_target_position(self, u, v, pose, ground_z=0.0):
         if self.camera_info is None or self.drone_pose is None:
             rospy.logwarn("Waiting for camera info and drone pose...")
             return None
@@ -201,7 +202,7 @@ class ObjectLocalizationNode:
         ray_cam = self.pixel_to_camera_ray(u, v)
 
         # Step 2: 相机方向转世界坐标方向向量
-        pose = self.drone_pose.pose
+        # pose = self.drone_pose.pose
         ray_world = self.camera_ray_to_world(ray_cam, pose.orientation)
 
         # Step 3: 相机位置（考虑相机相对无人机机体的偏移）
@@ -225,6 +226,8 @@ class ObjectLocalizationNode:
             return None
 
         target_world = cam_position + t * ray_world
+        v3 = np.array([-0.5, -0.5, 0])
+        target_world -= v3 # 人物相对于靶心的偏移
         return target_world
 
     def run(self):

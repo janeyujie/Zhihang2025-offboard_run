@@ -88,7 +88,9 @@ class Commander:
     def _image_callback(self, msg):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-            cv2.imshow("Standard_vtol Camera", cv_image)
+            scale = 0.5
+            resized_image = cv2.resize(cv_image, (0, 0), fx=scale, fy=scale)
+            cv2.imshow("Standard_vtol Camera", resized_image)
             cv2.waitKey(1)
         except CvBridgeError as e:
             rospy.logerr(e)
