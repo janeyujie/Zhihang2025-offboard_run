@@ -13,6 +13,7 @@ pip install ultralytics
 ```bash
 # 使用前需要
 cd ~/catkin_ws
+catkin clean
 catkin build
 ```
 
@@ -34,7 +35,7 @@ FW_AIRSPD_TRIM 巡航速度
 # 如果小人没加载完全的话要重新启动一次
 roslaunch px4 zhihang2025.launch
 
-# 运行通信脚本
+# 运行通信脚本 —— 这一步似乎不需要, 直接运行控制脚本就行。
 cd ~/XTDrone/communication/
 python3 vtol_communication.py standard_vtol 0
 
@@ -112,8 +113,14 @@ rostopic pub -1 /zhihang2025/third_man/reached std_msgs/Bool "data: true"
 ```
 
 
+### 验证
+自主运行打分脚本：验证逻辑请自行详细阅读题目文件验证，修补打分逻辑
+```bash
+python3 score_check.py
+```
 
-目前还存在的问题：
+
+### 目前还存在的问题
 
 阶段一：
 
