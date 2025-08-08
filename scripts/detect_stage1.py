@@ -212,8 +212,8 @@ class ObjectLocalizationNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        v1 = np.array([2.3, 0.4, 1.3])
-        v2 = np.array([0, 0, -0.05])
+        v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
+        v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
         drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
         # 计算相机在世界坐标系中的位置
         cam_position = drone_position + R_world_body @ cam_offset
@@ -226,7 +226,7 @@ class ObjectLocalizationNode:
             return None
 
         target_world = cam_position + t * ray_world
-        v3 = np.array([-0.5, -0.5, 0])
+        v3 = np.array([5.2, -0.5, 0])
         target_world -= v3 # 人物相对于靶心的偏移
         return target_world
 
@@ -243,6 +243,7 @@ if __name__ == '__main__':
             rospy.loginfo_throttle(10, "Waiting for signal...")
             rate.sleep()
         rospy.loginfo("Signal received! Starting to detect...")
+        node.run()
         while not rospy.is_shutdown():
             if node.ending:
                 rospy.loginfo("Ending signal received. Shutting down the node.")
