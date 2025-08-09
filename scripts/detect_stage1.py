@@ -46,8 +46,8 @@ class ObjectLocalizationNode:
         # 订阅相机图像和信息
         rospy.Subscriber('/standard_vtol_0/camera/image_raw', Image, self.image_callback, queue_size=1, buff_size=2**24)
         rospy.Subscriber('/standard_vtol_0/camera/camera_info', CameraInfo, self.camera_info_callback, queue_size=1)
-        # 订阅无人机姿态
-        rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
+        #rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
+        rospy.Subscriber('/standard_vtol_0/mavros/vision_pose/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
         rospy.Subscriber('/standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
         rospy.Subscriber("/standard_vtol_0/search_completed", Bool, self._ending_cb)
         self._init_tf()  # 初始化相机到机体坐标变换矩阵
@@ -64,7 +64,7 @@ class ObjectLocalizationNode:
             [ 0,  0, -1]
         ])
         self.T_cam2body[:3, 3] = [0.0, 0.0, -0.03]  # 相机在无人机下方 3cm, check .sdf
-
+    
     def camera_info_callback(self, msg):
         self.camera_info = msg
         # 提取相机内参矩阵 K 和畸变系数 D
@@ -212,9 +212,9 @@ class ObjectLocalizationNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
-        v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
-        drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
+        #v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
+        #v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
+        #drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
         # 计算相机在世界坐标系中的位置
         cam_position = drone_position + R_world_body @ cam_offset
         # rospy.loginfo(f"{self.drone_pose}, {self.T_cam2body}, {self.camera_info}, ")
@@ -226,8 +226,6 @@ class ObjectLocalizationNode:
             return None
 
         target_world = cam_position + t * ray_world
-        v3 = np.array([5.2, -0.5, 0])
-        target_world -= v3 # 人物相对于靶心的偏移
         return target_world
 
     def run(self):
