@@ -31,7 +31,7 @@ class Commander:
 
         # --- 订阅者与发布者 ---
         rospy.Subscriber("standard_vtol_0/mavros/state", State, self._state_cb)
-        rospy.Subscriber("standard_vtol_0/mavros/vision_pose/pose", PoseStamped, self._pose_cb)
+        rospy.Subscriber("standard_vtol_0/mavros/local_position/pose", PoseStamped, self._pose_cb)
         rospy.Subscriber("standard_vtol_0/camera/image_raw", Image, self._image_callback)
         
         self.setpoint_pos_pub = rospy.Publisher("standard_vtol_0/mavros/setpoint_position/local", PoseStamped, queue_size=10)
@@ -224,10 +224,6 @@ class Commander:
         while not rospy.is_shutdown():
             target_pose.header.stamp = rospy.Time.now()
             self.setpoint_pos_pub.publish(target_pose)
-            if self.current_pose.position.z < height:
-                self.publish_velocity(upward=4.0)
-            else:
-                self.publish_velocity(upward=-4.0)
 
             if abs(self.current_pose.position.z - height) < 0.5:
                 rospy.loginfo("Changing altitude to %.2f meters." % self.current_pose.position.z)
@@ -483,4 +479,3 @@ if __name__ == "__main__":
     finally:
         cv2.destroyAllWindows()
         rospy.loginfo("Commander node terminated.")
-
