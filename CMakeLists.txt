@@ -165,6 +165,8 @@ include_directories(
 catkin_install_python(PROGRAMS
    scripts/detect.py
    scripts/detect_stage1.py
+   scripts/detect_red.py
+   scripts/detect_white.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

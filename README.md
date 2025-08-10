@@ -53,7 +53,7 @@ python3 get_local_pose.py iris 1
 cd ~/XTDrone/zhihang2025
 python3 zhihang_control_targets.py
 
-# 启动 QGC 地面站
+# 启动 QGC 地面站（需要手动启动
 cd ~/Downloads
 ./QGroundControl.AppImage
 
@@ -104,8 +104,8 @@ rostopic echo /zhihang2025/third_man/pose
 rostopic echo /zhihang2025/iris_healthy_man/pose
 rostopic echo /zhihang2025/iris_critical_man/pose
 
-rostopic pub -1 /zhihang2025/third_man/pose geometry_msgs/Pose '{position: {x: 1495.0, y: -140.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
-rostopic pub -1 /zhihang2025/first_man/pose geometry_msgs/Pose '{position: {x: 1497.0, y: -108.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
+rostopic pub -1 /zhihang2025/third_man/pose geometry_msgs/Pose '{position: {x: 1491.2, y: -31.876, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
+rostopic pub -1 /zhihang2025/first_man/pose geometry_msgs/Pose '{position: {x: 1495.0, y: -105.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
 rostopic pub -1 /part1_completed std_msgs/Bool "data: true"
 rostopic pub -1 standard_vtol_0/waypoint_reached std_msgs/Bool "data: true"
 rostopic pub -1 /zhihang2025/first_man/reached std_msgs/Bool "data: true"

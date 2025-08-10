@@ -224,7 +224,7 @@ class XTDroneController:
         target = self.healthy_man_pose.position
         rospy.loginfo("Navigating to HEALTHY person at (%.2f, %.2f)" % (target.x, target.y))
         self.move(target.x, target.y, vel=4)
-        con.change_altitude(5.0)
+        con.change_altitude(8.0)
 
         rospy.loginfo("HEALTHY person reached. Starting to precise landing.")
         self.healthy_man_reached_pub.publish(Bool(True))
@@ -243,7 +243,7 @@ class XTDroneController:
         target = self.critical_man_pose.position
         rospy.loginfo("Navigating to CRITICAL person at (%.2f, %.2f)" % (target.x, target.y))
         self.move(target.x, target.y, vel=4)
-        con.change_altitude(3.0)
+        con.change_altitude(4.0)
         
         rospy.loginfo("CRITICAL person reached. Starting to precise landing.")
         self.critical_man_reached_pub.publish(Bool(True))
@@ -279,7 +279,7 @@ if __name__ == '__main__':
         con = XTDroneController()
         rospy.loginfo("Quadcopter is waiting for part1 completed...")
         rate = rospy.Rate(1)
-        '''while not rospy.is_shutdown() and not con.can_start:
+        while not rospy.is_shutdown() and not con.can_start:
             rospy.loginfo_throttle(10, "Waiting for signal...")
             rate.sleep()
         rospy.loginfo("Signal received! Continuing to part2")
@@ -293,7 +293,7 @@ if __name__ == '__main__':
         con.move(1450, -250, 10)
         con.change_altitude(12)
         
-        #con.moving_to_health()'''
+        con.moving_to_health()
         con.moving_to_critical()
         
         con.move(1450, 250, 10)
@@ -303,3 +303,4 @@ if __name__ == '__main__':
         
     except rospy.ROSInterruptException:
         pass
+

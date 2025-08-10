@@ -27,10 +27,11 @@ class Commander:
         self.fixed_wing_start_point = None
         self.rotor_zone_radius = 100.0
         self.searched = False
+        self.is_paused = False
 
         # --- 订阅者与发布者 ---
         rospy.Subscriber("standard_vtol_0/mavros/state", State, self._state_cb)
-        rospy.Subscriber("standard_vtol_0/mavros/local_position/pose", PoseStamped, self._pose_cb)
+        rospy.Subscriber("standard_vtol_0/mavros/vision_pose/pose", PoseStamped, self._pose_cb)
         rospy.Subscriber("standard_vtol_0/camera/image_raw", Image, self._image_callback)
         
         self.setpoint_pos_pub = rospy.Publisher("standard_vtol_0/mavros/setpoint_position/local", PoseStamped, queue_size=10)
@@ -45,6 +46,7 @@ class Commander:
         self.arming_client = rospy.ServiceProxy("standard_vtol_0/mavros/cmd/arming", CommandBool)
         rospy.wait_for_service("standard_vtol_0/mavros/set_mode")
         self.set_mode_client = rospy.ServiceProxy("standard_vtol_0/mavros/set_mode", SetMode)
+        rospy.Subscriber('/zhihang2025/detection_status', Bool, self.detection_status_callback)
         
         rospy.loginfo("Commander node initialized.")
 
@@ -95,9 +97,22 @@ class Commander:
         except CvBridgeError as e:
             rospy.logerr(e)
             
+    def detection_status_callback(self, msg):
+        rospy.loginfo(f"Received detection status: {'PAUSED' if msg.data else 'RESUMED'}")
+        self.is_paused = msg.data
+            
     def _distance(self, p1, p2):
         return math.sqrt(math.pow(p1.x - p2.x, 2) + math.pow(p1.y - p2.y, 2))
 
+    def publish_velocity(self, forward=0.0, leftward=0.0, upward=0.0, angular_z=0.0):
+        """发布速度指令 (机体坐标系：前左上)"""
+        twist_msg = Twist()
+        twist_msg.linear.x = forward
+        twist_msg.linear.y = leftward
+        twist_msg.linear.z = upward
+        twist_msg.angular.z = angular_z
+        self.xtdrone_vel_pub.publish(twist_msg)
+    
     def activate_offboard_and_arm(self):
         """
         激活 OFFBOARD 模式并解锁无人机。
@@ -209,6 +224,10 @@ class Commander:
         while not rospy.is_shutdown():
             target_pose.header.stamp = rospy.Time.now()
             self.setpoint_pos_pub.publish(target_pose)
+            if self.current_pose.position.z < height:
+                self.publish_velocity(upward=4.0)
+            else:
+                self.publish_velocity(upward=-4.0)
 
             if abs(self.current_pose.position.z - height) < 0.5:
                 rospy.loginfo("Changing altitude to %.2f meters." % self.current_pose.position.z)
@@ -252,6 +271,10 @@ class Commander:
         while not rospy.is_shutdown():
             target_pose.header.stamp = rospy.Time.now()
             self.setpoint_pos_pub.publish(target_pose)
+            
+            if self.is_paused:
+                self.hold()
+                rospy.loginfo_throttle(1, "Detection in progress, commander is PAUSED and hovering.")
             
             # 只检查水平距离
             if self._distance(self.current_pose.position, target_pose.pose.position) < completion_radius:
@@ -460,3 +483,4 @@ if __name__ == "__main__":
     finally:
         cv2.destroyAllWindows()
         rospy.loginfo("Commander node terminated.")
+

@@ -425,20 +425,20 @@ class ObjectTrackingHoverNode:
                     self.intercept_point = center + vec_on_circle
                     rospy.loginfo(f"Calculated intercept point: ({self.intercept_point[0]:.2f}, {self.intercept_point[1]:.2f})")
 
-                    dx = self.intercept_point[0] - self.drone_pose.pose.position.x
-                    dy = self.intercept_point[1] - self.drone_pose.pose.position.y
-                    dist = math.sqrt(dx**2 + dy**2)
-                    if dist > 0.5:
-                        rospy.loginfo_throttle(1, f"State: INTERCEPTING - Moving to intercept point, distance: {dist:.2f}m")
-                        vel_x = (dx / dist) * vel
-                        vel_y = (dy / dist) * vel
-                        f_vel = vel_x * math.cos(self.current_yaw) + vel_y * math.sin(self.current_yaw)
-                        l_vel = -vel_x * math.sin(self.current_yaw) + vel_y * math.cos(self.current_yaw)
-                        self._publish_velocity_command(f_vel, l_vel, 0.0)
-                    else:
-                        rospy.loginfo("Reached intercept point. Switching to DESCENDING_TO_WAIT.")
-                        self.landing_state = "DESCENDING_TO_WAIT"
-                        self.hover()
+                dx = self.intercept_point[0] - self.drone_pose.pose.position.x
+                dy = self.intercept_point[1] - self.drone_pose.pose.position.y
+                dist = math.sqrt(dx**2 + dy**2)
+                if dist > 0.5:
+                    rospy.loginfo_throttle(1, f"State: INTERCEPTING - Moving to intercept point, distance: {dist:.2f}m")
+                    vel_x = (dx / dist) * vel
+                    vel_y = (dy / dist) * vel
+                    f_vel = vel_x * math.cos(self.current_yaw) + vel_y * math.sin(self.current_yaw)
+                    l_vel = -vel_x * math.sin(self.current_yaw) + vel_y * math.cos(self.current_yaw)
+                    self._publish_velocity_command(f_vel, l_vel, 0.0)
+                else:
+                    rospy.loginfo("Reached intercept point. Switching to DESCENDING_TO_WAIT.")
+                    self.landing_state = "DESCENDING_TO_WAIT"
+                    self.hover()
                 '''# 移动到拦截点上空
                 self.move(self.intercept_point[0], self.intercept_point[1], 1.0)
 
@@ -781,5 +781,6 @@ if __name__ == '__main__':
         rospy.loginfo("Object Tracking Hover node terminated.")
         cv2.destroyAllWindows()
         exit(0)
+
 
 
