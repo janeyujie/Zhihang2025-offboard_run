@@ -9,9 +9,10 @@ from ultralytics import YOLO
 import numpy as np
 from tf.transformations import quaternion_matrix
 from scipy.spatial.transform import Rotation as R
-from offboard_run.msg import Object3DStamped # 导入自定义消息类型 (已定义并编译)
 from std_msgs.msg import String, Bool
 from collections import deque
+import threading
+from queue import Queue, Empty
 
 class ObjectLocalizationNode:
     def __init__(self):
@@ -28,6 +29,7 @@ class ObjectLocalizationNode:
         self.drone_pose = None
         self.can_start = False
         self.ending = False
+        self.image_rate = rospy.Rate(10)
 
         # 队列保存检测结果
         self.target_queues = {
@@ -50,19 +52,23 @@ class ObjectLocalizationNode:
         }
 
         # 订阅相机图像和信息
-        rospy.Subscriber('/standard_vtol_0/camera/image_raw', Image, self.image_callback, queue_size=1, buff_size=2**24)
-        rospy.Subscriber('/standard_vtol_0/camera/camera_info', CameraInfo, self.camera_info_callback, queue_size=1)
-        #rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
-        rospy.Subscriber('/standard_vtol_0/mavros/vision_pose/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
+        rospy.Subscriber('/standard_vtol_0/camera/image_raw', Image, self.image_callback, queue_size=10)
+        rospy.Subscriber('/standard_vtol_0/camera/camera_info', CameraInfo, self.camera_info_callback, queue_size=10)
+        rospy.Subscriber('/standard_vtol_0/mavros/vision_pose/pose', PoseStamped, self.drone_pose_callback, queue_size=10)
         rospy.Subscriber('/standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
         rospy.Subscriber("/standard_vtol_0/search_completed", Bool, self._ending_cb)
         self._init_tf()  # 初始化相机到机体坐标变换矩阵
 
         # 发布3D目标位置和种类
-        self.object_3d_pub = rospy.Publisher('/detected_objects_3d', Object3DStamped, queue_size=10)  # 10Hz发布一次
         self.status_pub = rospy.Publisher('/zhihang2025/detection_status', Bool, queue_size=1)
 
         rospy.loginfo("Object Localization Node Initialized.")
+        self.image_queue = Queue(maxsize=3)
+        self.processing_thread = threading.Thread(target=self.detection_worker)
+        self.processing_thread.daemon = True
+        self.processing_thread.start()
+        rospy.loginfo("start detection thread")
+
     def _init_tf(self):
         self.T_cam2body = np.eye(4)
         self.T_cam2body[:3, :3] = np.array([
@@ -94,79 +100,76 @@ class ObjectLocalizationNode:
     def image_callback(self, msg):
         if not self.can_start:
             return
-        
         if self.camera_info is None or self.drone_pose is None:
             rospy.logdebug("Waiting for camera info and drone pose...")
             return
 
+        # 检查队列数据类型，确保入队的是(msg, self.drone_pose)
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-            XTDrone_pose = self.drone_pose # 同步读取数据
+            # 深拷贝当前的drone_pose，避免后续被异步修改
+            import copy
+            pose_copy = copy.deepcopy(self.drone_pose)
+            if not self.image_queue.full():
+                self.image_queue.put((msg, pose_copy))
+            else:
+                try:
+                    self.image_queue.get_nowait()
+                    self.image_queue.put((msg, pose_copy))
+                except Exception as e:
+                    rospy.logwarn(f"Queue put error: {e}")
         except Exception as e:
-            rospy.logerr(f"CvBridge Error: {e}")
-            return
+            rospy.logerr(f"Image callback error: {e}", exc_info=True)
 
-        # 执行YOLOv8检测
-        results = self.model(source=cv_image, verbose=False)
+    def detection_worker(self):
+        while not rospy.is_shutdown():
+            try:
+                msg, drone_pose = self.image_queue.get(timeout=1.0)
+                cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+                XTDrone_pose = drone_pose
+                # 执行YOLOv8检测
+                results = self.model(source=cv_image, verbose=False)
+                found_target = False
+                for r in results:
+                    boxes = r.boxes
+                    for box in boxes:
+                        # 获取2D边界框和类别信息
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        conf = float(box.conf.item())
+                        cls = int(box.cls.item())
+                        object_type = self.model.names[cls]
 
-        found_target = False
+                        if conf > 0.7:
+                            # 获取边界框中心点 (u, v)
+                            u_pixel = (x1 + x2) / 2
+                            v_pixel = (y1 + y2) / 2
 
-        for r in results:
-            boxes = r.boxes
-            for box in boxes:
-                # 获取2D边界框和类别信息
-                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                conf = float(box.conf.item())
-                cls = int(box.cls.item())
-                object_type = self.model.names[cls]
+                            target_position = self.get_target_position(u_pixel, v_pixel, XTDrone_pose.pose)
+                            
+                            found_target = True
+                            rospy.loginfo(f"Detected {object_type} at 3D position (World): {target_position}")
 
-                # 获取边界框中心点 (u, v)
-                u_pixel = (x1 + x2) / 2
-                v_pixel = (y1 + y2) / 2
+                            # 分类保存到队列
+                            if object_type in self.target_queues:
+                                self.target_queues[object_type].append(target_position)
+                                self.publish_smoothed_position(object_type, target_position, u_pixel, v_pixel)
 
-                target_position = self.get_target_position(u_pixel, v_pixel, XTDrone_pose.pose)
-                
-                if target_position is not None and conf > 0.8:  # 置信度阈值
-                    found_target = True
-                    rospy.loginfo(f"Detected {object_type} at 3D position (World): {target_position}")
+                            # 绘制边界框
+                            cv2.rectangle(cv_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            cv2.putText(cv_image, f"{object_type} {conf:.2f} pose:{target_position}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-                    # 分类保存到队列
-                    if object_type in self.target_queues:
-                        self.target_queues[object_type].append(target_position)
-                        self.publish_smoothed_position(object_type, target_position)
+                # 显示图像（仅在检测到目标时）
+                if found_target:
+                    scale = 0.5  # 缩小一半
+                    resized_image = cv2.resize(cv_image, (0, 0), fx=scale, fy=scale)
+                    cv2.imshow("YOLOv8 Detection", resized_image)
+                    cv2.waitKey(1)
+            except Empty:
+                continue
+            except Exception as e:
+                rospy.logerr(f"Detection error: {e}", exc_info=True)
+            self.image_rate.sleep()
 
-                    # 发布消息
-                    obj_msg = Object3DStamped()
-                    obj_msg.header.stamp = rospy.Time.now()
-                    obj_msg.header.frame_id = "world"
-                    obj_msg.object_type = object_type
-                    obj_msg.position.x = float(target_position[0])
-                    obj_msg.position.y = float(target_position[1])
-                    obj_msg.position.z = float(target_position[2])
-                    obj_msg.confidence = float(conf)
-                    self.object_3d_pub.publish(obj_msg)
-
-                # 绘制边界框
-                cv2.rectangle(cv_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(cv_image, f"{object_type} {conf:.2f} pose:{target_position}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        # 显示图像（仅在检测到目标时）
-        if found_target:
-            scale = 0.5  # 缩小一半
-            resized_image = cv2.resize(cv_image, (0, 0), fx=scale, fy=scale)
-            cv2.imshow("YOLOv8 Detection", resized_image)
-            cv2.waitKey(1)
-
-    def publish_smoothed_position(self, object_type, target_position):
-        """对目标位置进行滤波平滑处理并发布"""
-        '''if not self.target_pause_triggered[object_type]:
-            self.target_pause_triggered[object_type] = True
-            rospy.loginfo(f"Target '{object_type}' confirmed! Signaling commander to PAUSE.")
-            self.status_pub.publish(Bool(data=True))
-            rospy.sleep(5.0)
-            rospy.loginfo(f"Pause complete for '{object_type}'. Signaling commander to RESUME.")
-            self.status_pub.publish(Bool(data=False))'''
-        
+    def publish_smoothed_position(self, object_type, target_position, u, v):
         queue = self.target_queues[object_type]
         if object_type == "red" and len(queue) > 5:
             smoothed_position = np.mean(queue, axis=0)
@@ -176,7 +179,7 @@ class ObjectLocalizationNode:
             pose_msg.position.z = smoothed_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
             rospy.loginfo(f"Published smoothed position for {object_type}: {smoothed_position}")
-        if object_type == "yellow":
+        if object_type == "yellow" and u > 320 and u < 960 and v > 180 and v < 540:
             pose_msg = Pose()
             pose_msg.position.x = target_position[0]
             pose_msg.position.y = target_position[1]
@@ -184,7 +187,7 @@ class ObjectLocalizationNode:
             self.pose_publishers[object_type].publish(pose_msg)
             rospy.loginfo(f"Published position for {object_type}: {target_position}")
 
-        if object_type == "white" and len(queue) > 3:
+        if object_type == "white" and u > 320 and u < 960 and v > 180 and v < 540:
             pose_msg = Pose()
             pose_msg.position.x = target_position[0]
             pose_msg.position.y = target_position[1]
@@ -210,14 +213,15 @@ class ObjectLocalizationNode:
         return self.normalize(ray_world)
 
     def get_target_position(self, u, v, pose, ground_z=0.0):
-        if self.camera_info is None or self.drone_pose is None:
+        # 优化：只依赖传入的 pose，健壮性检查，简化变量
+        if self.camera_info is None or pose is None:
             rospy.logwarn("Waiting for camera info and drone pose...")
             return None
+
         # Step 1: 像素坐标转相机方向向量
         ray_cam = self.pixel_to_camera_ray(u, v)
 
         # Step 2: 相机方向转世界坐标方向向量
-        # pose = self.drone_pose.pose
         ray_world = self.camera_ray_to_world(ray_cam, pose.orientation)
 
         # Step 3: 相机位置（考虑相机相对无人机机体的偏移）
@@ -227,9 +231,9 @@ class ObjectLocalizationNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        #v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
-        #v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
-        #drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
+        # v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
+        # v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
+        # drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
         # 计算相机在世界坐标系中的位置
         cam_position = drone_position + R_world_body @ cam_offset
         # rospy.loginfo(f"{self.drone_pose}, {self.T_cam2body}, {self.camera_info}, ")
