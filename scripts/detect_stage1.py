@@ -159,38 +159,38 @@ class ObjectLocalizationNode:
 
     def publish_smoothed_position(self, object_type, target_position):
         """对目标位置进行滤波平滑处理并发布"""
-        if not self.target_pause_triggered[object_type]:
+        '''if not self.target_pause_triggered[object_type]:
             self.target_pause_triggered[object_type] = True
             rospy.loginfo(f"Target '{object_type}' confirmed! Signaling commander to PAUSE.")
             self.status_pub.publish(Bool(data=True))
             rospy.sleep(5.0)
             rospy.loginfo(f"Pause complete for '{object_type}'. Signaling commander to RESUME.")
-            self.status_pub.publish(Bool(data=False))
+            self.status_pub.publish(Bool(data=False))'''
         
-            queue = self.target_queues[object_type]
-            if object_type == "red" and len(queue) > 5:
-                smoothed_position = np.mean(queue, axis=0)
-                pose_msg = Pose()
-                pose_msg.position.x = smoothed_position[0]
-                pose_msg.position.y = smoothed_position[1]
-                pose_msg.position.z = smoothed_position[2]
-                self.pose_publishers[object_type].publish(pose_msg)
-                rospy.loginfo(f"Published smoothed position for {object_type}: {smoothed_position}")
-            if object_type == "yellow":
-                pose_msg = Pose()
-                pose_msg.position.x = target_position[0]
-                pose_msg.position.y = target_position[1]
-                pose_msg.position.z = target_position[2]
-                self.pose_publishers[object_type].publish(pose_msg)
-                rospy.loginfo(f"Published position for {object_type}: {target_position}")
+        queue = self.target_queues[object_type]
+        if object_type == "red" and len(queue) > 5:
+            smoothed_position = np.mean(queue, axis=0)
+            pose_msg = Pose()
+            pose_msg.position.x = smoothed_position[0]
+            pose_msg.position.y = smoothed_position[1]
+            pose_msg.position.z = smoothed_position[2]
+            self.pose_publishers[object_type].publish(pose_msg)
+            rospy.loginfo(f"Published smoothed position for {object_type}: {smoothed_position}")
+        if object_type == "yellow":
+            pose_msg = Pose()
+            pose_msg.position.x = target_position[0]
+            pose_msg.position.y = target_position[1]
+            pose_msg.position.z = target_position[2]
+            self.pose_publishers[object_type].publish(pose_msg)
+            rospy.loginfo(f"Published position for {object_type}: {target_position}")
 
-            if object_type == "white" and len(queue) > 3:
-                pose_msg = Pose()
-                pose_msg.position.x = target_position[0]
-                pose_msg.position.y = target_position[1]
-                pose_msg.position.z = target_position[2]
-                self.pose_publishers[object_type].publish(pose_msg)
-                rospy.loginfo(f"Published position for {object_type}: {target_position}")
+        if object_type == "white" and len(queue) > 3:
+            pose_msg = Pose()
+            pose_msg.position.x = target_position[0]
+            pose_msg.position.y = target_position[1]
+            pose_msg.position.z = target_position[2]
+            self.pose_publishers[object_type].publish(pose_msg)
+            rospy.loginfo(f"Published position for {object_type}: {target_position}")
 
     def normalize(self, v):
         return v / np.linalg.norm(v)
@@ -272,5 +272,6 @@ if __name__ == '__main__':
     finally:
         rospy.loginfo("Object Localization node is shutting down.")
         cv2.destroyAllWindows()
+
 
 

@@ -84,6 +84,18 @@ rosrun offboard_run detect_white.py
 
 ```
 
+### 更新后的启动脚本
+
+```bash
+cd ~/Downloads
+./QGroundControl.AppImage
+
+cd ~/catkin_ws/src/offboard_run/scripts
+./launch.sh
+```
+
+
+
 
 
 订阅的相关话题（调试用
