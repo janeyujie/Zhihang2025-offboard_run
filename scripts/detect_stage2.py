@@ -35,24 +35,22 @@ class ObjectTrackingHoverNode:
         self.drone_pose = None
         self.camera_info_lock = threading.Lock()
         self.drone_pose_lock = threading.Lock()
-        self.target_lock = threading.Lock()
         self.vehicle_id = "iris_0"
         
         # 状态变量
         self.current_state = State()
         self.current_yaw = 0.0
         self.start_tracking = False
-        self.target = None
+        self.target_center = None
         self.target_found = False
-        self.critial_pose = Pose()
-        self.target_pose_published = False
+        self.healthy_man_pose_published = False
         
         # CV和YOLO
         self.bridge = CvBridge()
         
         rospack = rospkg.RosPack()
         pkg_path = rospack.get_path('offboard_run')
-        model_path = os.path.join(pkg_path, 'models', 'stage2.pt')
+        model_path = os.path.join(pkg_path, 'models', 'stage1.pt')
         self.model = YOLO(model_path)
         
         # PID控制器参数调整
@@ -73,16 +71,7 @@ class ObjectTrackingHoverNode:
             "yellow": deque(maxlen=5),
             "white": deque(maxlen=5)
         }
-        
-        self.landing_state = "SEARCHING"  # Initial state: SEARCHING, ALIGNING, DESCENDING
-        self.center_tolerance_px = 25     # 中心区域的容忍度（像素），+/- 20像素
-        self.center_low = 15
-        self.descend_speed_ms = -0.8      # 下降速度 (m/s)，负数表示向下
-        self.final_altitude_m = 0.5       # 最终悬停高度 (m)
-
-        # Camera parameters (will be updated from CameraInfo)
-        self.camera_center_x = None
-        self.camera_center_y = None
+        self.smoothed_target_pose = None
 
         self._init_subscribers()
         self._init_publishers()
@@ -104,16 +93,20 @@ class ObjectTrackingHoverNode:
 
     def _init_subscribers(self):
         # 修改话题名称以适配标准PX4+MAVROS设置
-        vehicle_id = self.vehicle_id
+        vehicle_id = self.vehicle_id  # 或者根据你的设置修改
         
         # 状态订阅 - 使用标准MAVROS话题
         rospy.Subscriber(f'/{vehicle_id}/mavros/state', State, self._state_cb)
-        rospy.Subscriber(f'/{vehicle_id}/mavros/vision_pose/pose', PoseStamped, self._pose_cb)
+        rospy.Subscriber(f'/{vehicle_id}/mavros/local_position/pose', PoseStamped, self._pose_cb)
         
         # 图像和相机信息订阅 - 修改为标准Gazebo相机话题
         self.image_sub = Subscriber(f'/{vehicle_id}/camera/image_raw', Image)
         self.camera_info_sub = Subscriber(f'/{vehicle_id}/camera/camera_info', CameraInfo)
-        self.pose_sub = Subscriber(f'/{vehicle_id}/mavros/vision_pose/pose', PoseStamped)
+        self.pose_sub = Subscriber(f'/{vehicle_id}/mavros/local_position/pose', PoseStamped)
+
+        # 如果上述话题不存在，尝试这些备选话题
+        # self.image_sub = Subscriber('/camera/image_raw', Image)
+        # self.camera_info_sub = Subscriber('/camera/camera_info', CameraInfo)
 
         # 同步订阅
         self.sync = ApproximateTimeSynchronizer(
@@ -124,13 +117,12 @@ class ObjectTrackingHoverNode:
         self.sync.registerCallback(self.synchronized_callback)
         
         # 开始信号订阅
-        rospy.Subscriber('/zhihang2025/first_man/reached', Bool, self._start_tracking_cb)
-        #rospy.Subscriber('/zhihang2025/third_man/reached', Bool, self._start_tracking_cb)
-        #rospy.Subscriber('/start_tracking', Bool, self._start_tracking_cb)
-        rospy.Subscriber('/zhihang2025/first_man/pose', Pose, self._target_pose_cb)
+        #rospy.Subscriber('/zhihang2025/first_man/reached', Bool, self._start_tracking_cb)
+        rospy.Subscriber('/zhihang2025/third_man/reached', Bool, self._start_tracking_cb)
 
     def _init_publishers(self):
-        vehicle_id = self.vehicle_id        
+        vehicle_id = self.vehicle_id  # 修改为你的机体ID
+        
         # 使用标准MAVROS速度控制话题
         self.velocity_pub = rospy.Publisher(f'/{vehicle_id}/mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
         rospy.loginfo("Velocity publisher initialized")
@@ -138,16 +130,18 @@ class ObjectTrackingHoverNode:
         self.cmd_pub = rospy.Publisher(f'/xtdrone/{vehicle_id}/cmd', String, queue_size=1)
         self.mavros_vel_pub = rospy.Publisher(f'/xtdrone/{vehicle_id}/cmd_vel_flu', Twist, queue_size=10)
         rospy.loginfo("MAVROS velocity publisher initialized")
+        # 移除xtdrone相关发布器，因为你使用的是标准PX4+MAVROS
+        # self.cmd_pub = rospy.Publisher('/xtdrone/standard_vtol_0/cmd', String, queue_size=10)
+        
         # 使用标准消息类型替代自定义消息
         self.object_pose_pub = rospy.Publisher('/detected_object_pose', PoseStamped, queue_size=10)
-        self.pose_publishers = {
-            "white": rospy.Publisher('/zhihang2025/iris_healthy_man/pose', Pose, queue_size=10),
-            "red": rospy.Publisher('/zhihang2025/iris_bad_man/pose', Pose, queue_size=10)
-        }
+        self.healthy_man_pub = rospy.Publisher('/zhihang2025/iris_healthy_man/pose', Pose, queue_size=10)
+        
         rospy.loginfo("Publishers initialized")
 
     def _init_services(self):
-        vehicle_id = self.vehicle_id        
+        vehicle_id = self.vehicle_id  # 修改为你的机体ID
+        
         try:
             # 等待MAVROS服务
             rospy.wait_for_service(f'{vehicle_id}/mavros/cmd/arming', timeout=5.0)
@@ -171,6 +165,7 @@ class ObjectTrackingHoverNode:
         self.control_thread.daemon = True
         self.control_thread.start()
 
+
     def _state_cb(self, msg):
         self.current_state = msg
 
@@ -186,22 +181,13 @@ class ObjectTrackingHoverNode:
         if msg.data:
             self.start_tracking = True
             rospy.loginfo("Received start tracking signal - beginning target tracking mode")
-            
-    def _target_pose_cb(self, msg):
-        self.critial_pose = msg
 
     def synchronized_callback(self, image_msg, camera_info_msg, pose_msg):
         """同步回调函数"""
         with self.camera_info_lock:
-            if self.camera_info is None: # 只在第一次接收时赋值
-                self.camera_info = camera_info_msg
-                self.camera_matrix = np.array(camera_info_msg.K).reshape((3, 3))
-                self.dist_coeffs = np.array(camera_info_msg.D)
-                # ADDED: Get camera center from camera info
-                self.camera_center_x = self.camera_matrix[0, 2]
-                self.camera_center_y = self.camera_matrix[1, 2]
-                rospy.loginfo(f"Camera center initialized to ({self.camera_center_x}, {self.camera_center_y})")
-
+            self.camera_info = camera_info_msg
+            self.camera_matrix = np.array(camera_info_msg.K).reshape((3, 3))
+            self.dist_coeffs = np.array(camera_info_msg.D)
 
         with self.drone_pose_lock:
             self.drone_pose = pose_msg
@@ -214,6 +200,27 @@ class ObjectTrackingHoverNode:
                 self.image_queue.put(image_msg)
             except:
                 pass
+            
+    def _publish_worker(self):
+        while not rospy.is_shutdown():
+            try:
+                result = self.result_queue.get(timeout=1.0)
+                object_type = result['type']
+                world_coords = result['world_coords']
+
+                if object_type in self.target_3d_queues:
+                    self.target_3d_queues[object_type].append(world_coords)
+                    
+                    target_q = self.target_3d_queues[object_type]
+                    if len(target_q) > 0:
+                        smoothed_position = np.mean(target_q, axis=0)
+                        # 平滑后的目标信息，包含位置和类型
+                        self.smoothed_target_info = {
+                            'position': smoothed_position,
+                            'type': object_type
+                        }
+            except Empty:
+                continue
 
     def _detection_worker(self):
         """图像处理工作线程"""
@@ -247,7 +254,7 @@ class ObjectTrackingHoverNode:
                         conf = float(box.conf.item())
                         cls = int(box.cls.item())
                         
-                        if conf > best_conf and conf > 0.7:  # 添加置信度阈值
+                        if conf > best_conf and conf > 0.5:  # 添加置信度阈值
                             best_conf = conf
                             u_pixel = (x1 + x2) / 2
                             v_pixel = (y1 + y2) / 2
@@ -258,10 +265,7 @@ class ObjectTrackingHoverNode:
                                     'center': (u_pixel, v_pixel),
                                     'world_coords': world_coords,
                                     'confidence': conf,
-                                    'bbox': (x1, y1, x2, y2),
-                                    'type': self.model.names[cls],
-                                    'u_pixel': u_pixel,
-                                    'v_pixel': v_pixel
+                                    'bbox': (x1, y1, x2, y2)
                                 }
                                 self.target_found = True
 
@@ -271,7 +275,7 @@ class ObjectTrackingHoverNode:
                                    (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
                 if best_target:
-                    self.target = best_target
+                    self.target_center = best_target['center']
                     
                     # 发布检测到的目标位置（使用标准消息）
                     target_pose = PoseStamped()
@@ -282,10 +286,9 @@ class ObjectTrackingHoverNode:
                     target_pose.pose.position.z = best_target['world_coords'][2]
                     self.object_pose_pub.publish(target_pose)
                     
-                    rospy.loginfo(f"Target found at pixel: {self.target}, world: {best_target['world_coords']}")
+                    rospy.loginfo(f"Target found at pixel: {self.target_center}, world: {best_target['world_coords']}")
                 else:
-                    self.target = None
-                    self.target_found = False
+                    self.target_center = None
                     rospy.loginfo("No target found")
 
                 # 显示图像
@@ -302,118 +305,133 @@ class ObjectTrackingHoverNode:
             self.image_rate.sleep()
 
     def _control_worker(self):
-        """
-        控制工作线程，实现“对准-下降” (Align-and-Descend) 的精确降落逻辑。
-        """
-        rospy.loginfo("Control worker started with Align-and-Descend logic.")
+        """控制工作线程"""
+        target_altitude = 0.5
+        position_tolerance = 0.3
+        altitude_tolerance = 1.5
+        
+        # 确保飞行器处于OFFBOARD模式
+        self._ensure_offboard_mode()
+        rospy.loginfo("Control worker started - waiting for target tracking to begin")
+        
+        last_request = rospy.Time.now()
+        flag = 0
+        pos3_distance = None
+        
+        # 初始化变量用于记录上一次的XY轴速度
+        last_control_x = 0.0
+        last_control_y = 0.0
         
         while not rospy.is_shutdown():
-            
             if not self.start_tracking:
                 rospy.sleep(0.1)
                 continue
-
+                
             if self.drone_pose is None or self.camera_info is None:
-                #self._publish_velocity_command(0.0, 0.0, 0.0) # 保持悬停
-                self.hover()
-                self.landing_state = "SEARCHING"
                 rospy.sleep(0.1)
                 continue
-
-            '''with self.target_lock:
-                target_found_local = self.target_found
-                target_local = self.target'''
-
-            # ------------------ 状态机逻辑 ------------------
-            self._ensure_offboard_mode()
-            vel = 1.0
-            #current_altitude = self.current_pos.position.z
-            current_altitude = self.drone_pose.pose.position.z
-            if current_altitude <= 1.0:
-                if not self.target_pose_published and current_altitude <= 0.5:
-                    self._publish_velocity_command()
-                    self.hover()
-                    pose_msg = Pose()
-                    pose_msg.x = self.drone_pose.pose.position.x
-                    pose_msg.position.y = self.drone_pose.pose.position.y
-                    pose_msg.position.z = self.target['world_coords'][2]
-                    self.pose_publishers[self.target['type']].publish(pose_msg)
-                    rospy.loginfo(f"SUCCESS: Target '{self.target['type']}' pose {pose_msg.position.x}, {pose_msg.position.y}, {pose_msg.position.z} published.")
-                    self.target_pose_published = True
-                    
-                else:
-                    self._publish_velocity_command(0.0, 0.0, -0.4)
-                continue
-            # 状态1: 搜索目标
-            if self.target is None:
-                self.landing_state = "SEARCHING"
-                rospy.loginfo_throttle(2, f"State: {self.landing_state} - No target detected. Hovering.")
-                #self.move(self.critial_pose.position.x, self.critial_pose.position.y, 1.0)
-                #self.hover()
-                dx = self.critial_pose.position.x - self.drone_pose.pose.position.x
-                dy = self.critial_pose.position.y - self.drone_pose.pose.position.y
-                dist_to_search = math.sqrt(dx**2 + dy**2)
-                if dist_to_search > 2.0:
-                    rospy.loginfo_throttle(2, f"State: {self.landing_state} - No target. Moving to search pose. Distance: {dist_to_search:.2f}m")
-                    # 使用比例控制，计算世界坐标系下的瞬时速度
-                    vel_x_world = (dx / dist_to_search) * 1.5
-                    vel_y_world = (dy / dist_to_search) * 1.5
-                    
-                    # 将世界速度转换为机体速度
-                    forward_vel = vel_x_world * math.cos(self.current_yaw) + vel_y_world * math.sin(self.current_yaw)
-                    leftward_vel = -vel_x_world * math.sin(self.current_yaw) + vel_y_world * math.cos(self.current_yaw)
-                    self._publish_velocity_command(forward_vel, leftward_vel, 0.0)
-                else:
-                    # 到达搜索点附近，悬停等待
-                    rospy.loginfo_throttle(5, f"State: {self.landing_state} - Arrived at search pose. Hovering.")
-                    self._publish_velocity_command()
                 
-                self.control_rate.sleep()
-                continue
-
-            # 获取当前高度和目标像素位置
-            
-            target_u = self.target['u_pixel']
-            target_v = self.target['v_pixel']
-
-            # 计算像素误差 (目标相对于中心)
-            # error > 0 表示目标在中心的右侧/下方
-            # error < 0 表示目标在中心的左侧/上方
-            error_x_px = target_u - self.camera_center_x
-            error_y_px = target_v - self.camera_center_y
-            dx = self.target['world_coords'][0] - self.drone_pose.pose.position.x
-            dy = self.target['world_coords'][1] - self.drone_pose.pose.position.y
-            horizontal_distance = math.sqrt(dx**2 + dy**2)
-
-            # 检查是否在中心容忍度范围内
-            if (current_altitude <= 2.0):
-                is_aligned = (abs(error_x_px) < self.center_low) and \
-                        (abs(error_y_px) < self.center_low)
-                vel = 0.5
-            else:
-                is_aligned = (abs(error_x_px) < self.center_tolerance_px) and \
-                        (abs(error_y_px) < self.center_tolerance_px)
-
-            # 状态2: 水平对准
-            if not is_aligned:
-                self.landing_state = "ALIGNING"
-                rospy.loginfo_throttle(1, f"State: {self.landing_state} - Error(px): x={error_x_px:.1f}, y={error_y_px:.1f}")
-
-                vel_x_world = (dx / horizontal_distance) * vel
-                vel_y_world = (dy / horizontal_distance) * vel
-
-                forward_vel = vel_x_world * math.cos(self.current_yaw) + vel_y_world * math.sin(self.current_yaw)
-                leftward_vel = -vel_x_world * math.sin(self.current_yaw) + vel_y_world * math.cos(self.current_yaw)
+            try:
+                # 定期检查并设置OFFBOARD模式
+                # self._ensure_offboard_mode()
+                rospy.loginfo("Control worker active - tracking target")
+                
+                current_altitude = self.drone_pose.pose.position.z
+                
+                if self.target_found and self.target_center is not None:
+                    # 计算目标世界坐标
+                    world_coords = self.get_target_position(self.target_center[0], self.target_center[1])
+                    rospy.loginfo(f"worker:::::Target world coordinates: {world_coords}")
                     
-                self._publish_velocity_command(forward_vel, leftward_vel, 0.0)
-
-            # 状态3: 垂直下降
-            else:
-                # 未到达最终高度，继续下降
-                self.landing_state = "DESCENDING"
-                rospy.loginfo_throttle(1, f"State: {self.landing_state} - Aligned. Descending to {self.final_altitude_m}m. Current: {current_altitude:.2f}m")
-                self._publish_velocity_command(0.0, 0.0, self.descend_speed_ms)
-            
+                    if world_coords is not None:
+                        # 计算水平位置误差
+                        error_x = world_coords[0] - self.drone_pose.pose.position.x
+                        error_y = world_coords[1] - self.drone_pose.pose.position.y
+                        rospy.loginfo(f"error_x: {error_x}; error_y: {error_y}")
+                        
+                        # 计算到目标的水平距离
+                        horizontal_distance = np.sqrt(error_x**2 + error_y**2)
+                        if horizontal_distance > 2.0:
+                            self.move(world_coords[0], world_coords[1], 2)
+                            continue
+                        
+                        # 计算高度误差
+                        altitude_error = current_altitude - target_altitude
+                        
+                        # 水平位置PID控制
+                        abs_error_x = abs(error_x)
+                        abs_error_y = abs(error_y)
+                        
+                        control_x = self.pid_x(abs_error_x)
+                        control_y = self.pid_y(abs_error_y)
+                        
+                        # 根据误差符号确定方向
+                        if error_x < 0:
+                            control_x = -control_x
+                        if error_y < 0:
+                            control_y = -control_y
+                            
+                        # 动态调整控制速度
+                        '''if horizontal_distance > 2.0:
+                            speed_factor = min(2.0, horizontal_distance * 0.8)
+                            control_x = np.clip(control_x * speed_factor, -6.0, 6.0)
+                            control_y = np.clip(control_y * speed_factor, -6.0, 6.0)
+                        elif horizontal_distance > 1.0:
+                            speed_factor = 1.5
+                            control_x = np.clip(control_x * speed_factor, -4.0, 4.0)
+                            control_y = np.clip(control_y * speed_factor, -4.0, 4.0)
+                        else:
+                            speed_factor = 0.8
+                            control_x = np.clip(control_x * speed_factor, -2.0, 2.0)
+                            control_y = np.clip(control_y * speed_factor, -2.0, 2.0)
+                        
+                        # 高度控制
+                        if abs(altitude_error) > altitude_tolerance:
+                            if altitude_error > 0:
+                                control_z = -min(1.5, abs(altitude_error) * 1.0)
+                            else:
+                                control_z = min(1.5, abs(altitude_error) * 1.0)
+                        else:
+                            control_z = 0.0'''
+                        # 根据距离选择控制策略
+                        if horizontal_distance > 1.5:
+                            speed_factor = 1.5 
+                            control_x = self.pid_x(error_x) * speed_factor
+                            control_y = self.pid_y(error_y) * speed_factor
+                            control_z = self.pid_z(-altitude_error)
+                        else:
+                            speed_factor = 0.8
+                            control_x = self.pid_x(error_x) * speed_factor
+                            control_y = self.pid_y(error_y) * speed_factor                            
+                            # 在近距离时，采用缓慢下降的策略
+                            if current_altitude > target_altitude + altitude_tolerance:
+                                control_z = -0.3
+                            else:
+                                control_z = 0.0
+                        
+                        forward_vel = control_x * math.cos(self.current_yaw) + control_y * math.sin(self.current_yaw)
+                        leftward_vel = -control_x * math.sin(self.current_yaw) + control_y * math.cos(self.current_yaw)
+                        
+                        # 检查是否已到达目标位置并悬停
+                        if (horizontal_distance < position_tolerance and 
+                            abs(altitude_error) < altitude_tolerance):
+                            self._publish_velocity_command(0.0, 0.0, 0.0)
+                            rospy.loginfo(f"TARGET REACHED! Hovering at {current_altitude:.2f}m above target")
+                        else:
+                            self._publish_velocity_command(forward_vel, leftward_vel, control_z)
+                            
+                            rospy.loginfo(f"Tracking target - Control: x={control_x:.2f}, y={control_y:.2f}, z={control_z:.2f}, "
+                                        f"h_dist={horizontal_distance:.2f}m, alt={current_altitude:.2f}m, "
+                                        f"alt_error={altitude_error:.2f}m, mode={self.current_state.mode}")
+                    
+                else:
+                    # 没有找到目标时悬停在当前位置
+                    self._publish_velocity_command(0.0, 0.0, 0.0)
+                    rospy.loginfo_throttle(2, f"No target detected - hovering and searching... mode={self.current_state.mode}")
+                    
+            except Exception as e:
+                rospy.logerr(f"Control error: {e}")
+                
             self.control_rate.sleep()
     
     def _ensure_offboard_mode(self):
@@ -422,8 +440,12 @@ class ObjectTrackingHoverNode:
             if (self.current_state.mode != "OFFBOARD" and 
                 hasattr(self, '_last_mode_request') and 
                 (rospy.Time.now() - self._last_mode_request).to_sec() > 2.0):
+                
                 try:
-                    if self.set_mode_client(custom_mode='OFFBOARD').mode_sent:
+                    offb_set_mode = SetMode()
+                    offb_set_mode.custom_mode = 'OFFBOARD'
+                    offb_set_mode.base_mode = 'OFFBOARD'
+                    if self.set_mode_client(offb_set_mode).mode_sent:
                         rospy.loginfo("OFFBOARD mode enabled via MAVROS")
                     self._last_mode_request = rospy.Time.now()
                 except rospy.ServiceException as e:
@@ -431,8 +453,6 @@ class ObjectTrackingHoverNode:
         
         if not hasattr(self, '_last_mode_request'):
             self._last_mode_request = rospy.Time.now()
-        self.publish_command('OFFBOARD')
-        #rospy.loginfo("Commanding offboard...")
 
     def _distance(self, x1, y1, x2, y2):
         return math.sqrt(math.pow(x1 - x2, 2) + math.pow(y1 - y2, 2))
@@ -444,10 +464,10 @@ class ObjectTrackingHoverNode:
         self.cmd_pub.publish(cmd_msg)
         rospy.loginfo(f"Published command: {command}")
 
-    def _publish_velocity_command(self, vx=0.0, vy=0.0, vz=0.0, az=0.0):
+    def _publish_velocity_command(self, vx, vy, vz, az=0.0):
         """发布速度指令到MAVROS,发布速度指令 (机体坐标系：前左上)"""
         # 使用TwistStamped消息
-        '''twist_stamped = TwistStamped()
+        twist_stamped = TwistStamped()
         twist_stamped.header.stamp = rospy.Time.now()
         twist_stamped.header.frame_id = "base_link"
         twist_stamped.twist.linear.x = vx
@@ -456,7 +476,7 @@ class ObjectTrackingHoverNode:
         twist_stamped.twist.angular.x = 0.0
         twist_stamped.twist.angular.y = 0.0
         twist_stamped.twist.angular.z = az
-        self.velocity_pub.publish(twist_stamped)'''
+        self.velocity_pub.publish(twist_stamped)
         
         # 备用：也发布Twist消息
         twist = Twist()
@@ -467,7 +487,7 @@ class ObjectTrackingHoverNode:
         twist.angular.y = 0.0
         twist.angular.z = az
         self.mavros_vel_pub.publish(twist)
-        #rospy.loginfo(f"Published twist: {twist}")
+        rospy.loginfo(f"Published twist: {twist}")
 
     def move(self, x, y, vel):
         # 以vel大小的速度水平移动到坐标(x,y)
@@ -513,10 +533,6 @@ class ObjectTrackingHoverNode:
             
         rospy.loginfo(f"Position ({self.drone_pose.pose.position.x}, {self.drone_pose.pose.position.y}, {self.drone_pose.pose.position.z}) reached.")
 
-    def hover(self):
-        self.publish_command('HOVER')
-        self._publish_velocity_command()
-    
     # ============ pose calculate ==========
     def normalize(self, v):
         return v / np.linalg.norm(v)
@@ -553,9 +569,9 @@ class ObjectTrackingHoverNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        #v1 = np.array([2.5, 2.7, 1.3])
-        #v2 = np.array([0, 0, 0])
-        #drone_position = drone_position + v1 + v2
+        v1 = np.array([2.52, 2.67, 0.1])
+        v2 = np.array([0, 0, 0])
+        drone_position = drone_position + v1 + v2
         cam_position = drone_position + R_world_body @ cam_offset
 
         # 计算射线与地面的交点
@@ -575,26 +591,10 @@ class ObjectTrackingHoverNode:
 if __name__ == '__main__':
     try:
         node = ObjectTrackingHoverNode()
-        #node.run()
-        rate = rospy.Rate(1)
-        rospy.loginfo("Object Tracking Hover Node is running...")
-        rospy.loginfo("Waiting for /first_man reached signal to begin target tracking...")
-        while not rospy.is_shutdown():
-            if node.target_pose_published:
-                rospy.loginfo("Ending signal received. Shutting down the node.")
-                rospy.signal_shutdown("Mission part 1 completed, shutdown signal received")
-                break 
-                
-            rate.sleep()
-            
+        node.run()
     except rospy.ROSInterruptException:
-        rospy.loginfo("Node interrupted by user")
-    except Exception as e:
-        rospy.logfatal(f"An unhandled error occurred: {e}", exc_info=True)
+        pass
     finally:
         rospy.loginfo("Object Tracking Hover node terminated.")
         cv2.destroyAllWindows()
         exit(0)
-
-
-

@@ -51,8 +51,8 @@ class XTDroneController:
         self.critical_man_reached_pub = rospy.Publisher("/zhihang2025/first_man/reached", Bool, queue_size=1)
         self.healthy_man_reached_pub = rospy.Publisher("/zhihang2025/third_man/reached", Bool, queue_size=1)
         
-        rospy.Subscriber("/zhihang2025/iris_healthy_man/pose", Pose, self._critical_complete_cb)
-        rospy.Subscriber("/zhihang2025/iris_bad_man/pose", Pose, self._healthy_complete_cb)
+        rospy.Subscriber("/zhihang2025/iris_bad_man/pose", Pose, self._critical_complete_cb)
+        rospy.Subscriber("/zhihang2025/iris_healthy_man/pose", Pose, self._healthy_complete_cb)
         
         rospy.wait_for_service("/iris_0/mavros/cmd/arming")
         self.arming_client = rospy.ServiceProxy("/iris_0/mavros/cmd/arming", CommandBool)
@@ -233,7 +233,7 @@ class XTDroneController:
         while not rospy.is_shutdown() and self.healthy_complete == False:
             rospy.sleep(1)
         rospy.loginfo("Searching for HEALTHY person completed... Continue to search critical man...")
-        con.change_altitude(12)
+        con.change_altitude(8.0)
 
     def moving_to_critical(self):
         rospy.loginfo("Waiting for CRITICAL person's location...")
