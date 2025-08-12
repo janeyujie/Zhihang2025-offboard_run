@@ -256,7 +256,6 @@ if __name__ == '__main__':
             rospy.loginfo_throttle(10, "Waiting for signal...")
             rate.sleep()
         rospy.loginfo("Signal received! Starting to detect...")
-        node.run()
         while not rospy.is_shutdown():
             if node.ending:
                 rospy.loginfo("Ending signal received. Shutting down the node.")

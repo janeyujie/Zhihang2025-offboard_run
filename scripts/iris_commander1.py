@@ -178,7 +178,7 @@ class XTDroneController:
         h = self.current_pose.position.z
         initial_yaw = self.current_yaw
         
-        while self._distance(self.current_pose.position.x, self.current_pose.position.y, x, y) > 3.0:
+        while self._distance(self.current_pose.position.x, self.current_pose.position.y, x, y) > 1.0:
             if rospy.is_shutdown():
                 break
             current_time = rospy.Time.now()
