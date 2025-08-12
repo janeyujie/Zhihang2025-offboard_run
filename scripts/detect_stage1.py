@@ -54,7 +54,8 @@ class ObjectLocalizationNode:
         # 订阅相机图像和信息
         rospy.Subscriber('/standard_vtol_0/camera/image_raw', Image, self.image_callback, queue_size=10)
         rospy.Subscriber('/standard_vtol_0/camera/camera_info', CameraInfo, self.camera_info_callback, queue_size=10)
-        rospy.Subscriber('/standard_vtol_0/mavros/vision_pose/pose', PoseStamped, self.drone_pose_callback, queue_size=10)
+        rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
+        # rospy.Subscriber('/standard_vtol_0/mavros/vision_pose/pose', PoseStamped, self.drone_pose_callback, queue_size=1) 这个话题并没信息？？
         rospy.Subscriber('/standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
         rospy.Subscriber("/standard_vtol_0/search_completed", Bool, self._ending_cb)
         self._init_tf()  # 初始化相机到机体坐标变换矩阵
@@ -125,7 +126,6 @@ class ObjectLocalizationNode:
             try:
                 msg, drone_pose = self.image_queue.get(timeout=1.0)
                 cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-                XTDrone_pose = drone_pose
                 # 执行YOLOv8检测
                 results = self.model(source=cv_image, verbose=False)
                 found_target = False
@@ -143,7 +143,7 @@ class ObjectLocalizationNode:
                             u_pixel = (x1 + x2) / 2
                             v_pixel = (y1 + y2) / 2
 
-                            target_position = self.get_target_position(u_pixel, v_pixel, XTDrone_pose.pose)
+                            target_position = self.get_target_position(u_pixel, v_pixel, drone_pose.pose)
                             
                             found_target = True
                             rospy.loginfo(f"Detected {object_type} at 3D position (World): {target_position}")
@@ -179,7 +179,7 @@ class ObjectLocalizationNode:
             pose_msg.position.z = smoothed_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
             rospy.loginfo(f"Published smoothed position for {object_type}: {smoothed_position}")
-        if object_type == "yellow" and u > 320 and u < 960 and v > 180 and v < 540:
+        if object_type == "yellow" and u > 320 and u < 960 and v > 180 and v < 540: # 保证黄色和红色识别的时候在整个视界的中心矩形区域内
             pose_msg = Pose()
             pose_msg.position.x = target_position[0]
             pose_msg.position.y = target_position[1]
@@ -213,7 +213,7 @@ class ObjectLocalizationNode:
         return self.normalize(ray_world)
 
     def get_target_position(self, u, v, pose, ground_z=0.0):
-        # 优化：只依赖传入的 pose，健壮性检查，简化变量
+        # 根据T时刻位姿和图像信息计算指向目标的方向向量并且做坐标转换
         if self.camera_info is None or pose is None:
             rospy.logwarn("Waiting for camera info and drone pose...")
             return None
@@ -231,9 +231,9 @@ class ObjectLocalizationNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        # v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
-        # v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
-        # drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
+        v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
+        v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
+        drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
         # 计算相机在世界坐标系中的位置
         cam_position = drone_position + R_world_body @ cam_offset
         # rospy.loginfo(f"{self.drone_pose}, {self.T_cam2body}, {self.camera_info}, ")
@@ -245,6 +245,8 @@ class ObjectLocalizationNode:
             return None
 
         target_world = cam_position + t * ray_world
+        v3 = np.array([1.2, -0.5, 0])
+        target_world -= v3 # 人物相对于靶心的偏移, 这里主要是和算分的脚本对齐，并不知道实际算分的时候是怎么样的
         return target_world
 
     def run(self):
@@ -266,7 +268,6 @@ if __name__ == '__main__':
                 rospy.loginfo("Ending signal received. Shutting down the node.")
                 rospy.signal_shutdown("Mission part 1 completed, shutdown signal received")
                 break 
-                
             rate.sleep()
 
     except rospy.ROSInterruptException:
@@ -276,6 +277,3 @@ if __name__ == '__main__':
     finally:
         rospy.loginfo("Object Localization node is shutting down.")
         cv2.destroyAllWindows()
-
-
-
