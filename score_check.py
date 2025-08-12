@@ -201,7 +201,7 @@ class ScoringSystem:
         self.compare_and_score(
             label='healthy',
             pose=ps,
-            model_name='landing2',
+            model_name='landing_white',
             score_formula=lambda D, max_dist, w: (100 - 33 * D) * w if D <= max_dist else 0,
             max_dist=3,
             score_weight=0.1,
@@ -217,7 +217,7 @@ class ScoringSystem:
         self.compare_and_score(
             label='bad',
             pose=ps,
-            model_name='landing2',
+            model_name='landing_red',
             score_formula=lambda D, max_dist, w: (100 - 33 * D) * w if D <= max_dist else 0,
             max_dist=3,
             score_weight=0.3,
