@@ -196,8 +196,8 @@ class ScoringSystem:
         if self.scored['healthy']:
             return
         ps = msg
-        ps.position.x += 0.5 # 靶心偏移
-        ps.position.y += 0.5
+        ps.position.x -= 0.5 # 靶心偏移
+        # ps.position.y += 0.5
         self.compare_and_score(
             label='healthy',
             pose=ps,
@@ -212,8 +212,8 @@ class ScoringSystem:
         if self.scored['bad']:
             return
         ps = msg
-        ps.position.x += 0.5 # 靶心偏移
-        ps.position.y += 0.5
+        ps.position.x -= 0.5 # 靶心偏移
+        # ps.position.y += 0.5
         self.compare_and_score(
             label='bad',
             pose=ps,
