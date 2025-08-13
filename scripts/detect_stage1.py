@@ -174,14 +174,14 @@ class ObjectLocalizationNode:
         if object_type == "red" and len(queue) > 5:
             smoothed_position = np.mean(queue, axis=0)
             pose_msg = Pose()
-            pose_msg.position.x = smoothed_position[0]
+            pose_msg.position.x = smoothed_position[0] - 3
             pose_msg.position.y = smoothed_position[1]
             pose_msg.position.z = smoothed_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
             rospy.loginfo(f"Published smoothed position for {object_type}: {smoothed_position}")
         if object_type == "yellow" and u > 320 and u < 960 and v > 180 and v < 540: # 保证黄色和红色识别的时候在整个视界的中心矩形区域内
             pose_msg = Pose()
-            pose_msg.position.x = target_position[0]
+            pose_msg.position.x = target_position[0] - 3 + 1.23
             pose_msg.position.y = target_position[1]
             pose_msg.position.z = target_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
@@ -189,7 +189,7 @@ class ObjectLocalizationNode:
 
         if object_type == "white" and u > 320 and u < 960 and v > 180 and v < 540:
             pose_msg = Pose()
-            pose_msg.position.x = target_position[0]
+            pose_msg.position.x = target_position[0] - 3 + 1.23
             pose_msg.position.y = target_position[1]
             pose_msg.position.z = target_position[2]
             self.pose_publishers[object_type].publish(pose_msg)

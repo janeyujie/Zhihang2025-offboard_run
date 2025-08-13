@@ -75,7 +75,7 @@ class ObjectTrackingHoverNode:
         }
         
         self.landing_state = "SEARCHING"  # Initial state: SEARCHING, ALIGNING, DESCENDING
-        self.center_tolerance_px = 25     # 中心区域的容忍度（像素），+/- 20像素
+        self.center_tolerance_px = 45     # 中心区域的容忍度（像素），+/- 20像素
         self.center_low = 15
         self.descend_speed_ms = -0.8      # 下降速度 (m/s)，负数表示向下
         self.final_altitude_m = 0.5       # 最终悬停高度 (m)
@@ -326,7 +326,7 @@ class ObjectTrackingHoverNode:
 
             # ------------------ 状态机逻辑 ------------------
             self._ensure_offboard_mode()
-            vel = 1.0
+            vel = 0.5
             #current_altitude = self.current_pos.position.z
             current_altitude = self.drone_pose.pose.position.z
             if current_altitude <= 1.0:
@@ -334,7 +334,7 @@ class ObjectTrackingHoverNode:
                     self._publish_velocity_command()
                     self.hover()
                     pose_msg = Pose()
-                    pose_msg.x = self.drone_pose.pose.position.x
+                    pose_msg.position.x = self.drone_pose.pose.position.x
                     pose_msg.position.y = self.drone_pose.pose.position.y
                     pose_msg.position.z = self.target['world_coords'][2]
                     self.pose_publishers[self.target['type']].publish(pose_msg)
@@ -389,7 +389,7 @@ class ObjectTrackingHoverNode:
             if (current_altitude <= 2.0):
                 is_aligned = (abs(error_x_px) < self.center_low) and \
                         (abs(error_y_px) < self.center_low)
-                vel = 0.5
+                vel = 0.2
             else:
                 is_aligned = (abs(error_x_px) < self.center_tolerance_px) and \
                         (abs(error_y_px) < self.center_tolerance_px)
@@ -410,6 +410,7 @@ class ObjectTrackingHoverNode:
             # 状态3: 垂直下降
             else:
                 # 未到达最终高度，继续下降
+                self._publish_velocity_command(0, 0, 0)
                 self.landing_state = "DESCENDING"
                 rospy.loginfo_throttle(1, f"State: {self.landing_state} - Aligned. Descending to {self.final_altitude_m}m. Current: {current_altitude:.2f}m")
                 self._publish_velocity_command(0.0, 0.0, self.descend_speed_ms)
