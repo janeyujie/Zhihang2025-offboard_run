@@ -35,7 +35,9 @@ class ImageCollector:
         rospy.loginfo("Press 's' to save image, 'q' to quit.")
         while not rospy.is_shutdown():
             if self.latest_image is not None:
-                cv2.imshow("Live Camera Feed", self.latest_image)
+                scale = 0.5  # 缩小一半
+                resized_image = cv2.resize(self.latest_image, (0, 0), fx=scale, fy=scale)
+                cv2.imshow("Live Camera Feed", resized_image)
                 key = cv2.waitKey(1) & 0xFF  # Mask to get lower 8 bits
                 if key == ord('s'):
                     filename = f"{self.save_dir}/img_{self.count+1}_{self.latest_stamp}.jpg"

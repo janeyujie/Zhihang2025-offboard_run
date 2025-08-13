@@ -171,7 +171,7 @@ class ObjectLocalizationNode:
 
     def publish_smoothed_position(self, object_type, target_position, u, v):
         queue = self.target_queues[object_type]
-        if object_type == "red" and len(queue) > 5:
+        if object_type == "red" and len(queue) > 5: # and u > 320 and u < 960 and v > 180 and v < 540
             smoothed_position = np.mean(queue, axis=0)
             pose_msg = Pose()
             pose_msg.position.x = smoothed_position[0]
