@@ -73,7 +73,7 @@ rosrun offboard_run detect_stage1.py
 
 # 阶段二四旋翼无人机控制
 cd ~/catkin_ws/src/offboard_run/scripts
-python3 iris_commander1.py
+python3 iris_commander.py
 
 # 阶段二识别重伤人员和健康人员详细坐标脚本
 source ~/catkin_ws/devel/setup.bash
