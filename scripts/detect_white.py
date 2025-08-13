@@ -22,6 +22,7 @@ from message_filters import Subscriber, ApproximateTimeSynchronizer
 import tf
 import math
 from simple_pid import PID
+import copy
 
 
 class ObjectTrackingHoverNode:
@@ -60,12 +61,6 @@ class ObjectTrackingHoverNode:
         self.image_rate = rospy.Rate(20)
         self.control_rate = rospy.Rate(20)
         self.rate = rospy.Rate(20)
-        
-        self.target_3d_queues = {
-            "red": deque(maxlen=5),
-            "yellow": deque(maxlen=5),
-            "white": deque(maxlen=5)
-        }
         
         self.landing_state = "SEARCHING"  # Initial state: SEARCHING, ALIGNING, DESCENDING
         
@@ -115,12 +110,13 @@ class ObjectTrackingHoverNode:
         # 图像和相机信息订阅 - 修改为标准Gazebo相机话题
         self.image_sub = Subscriber(f'/{vehicle_id}/camera/image_raw', Image)
         self.camera_info_sub = Subscriber(f'/{vehicle_id}/camera/camera_info', CameraInfo)
-        self.pose_sub = Subscriber(f'/{vehicle_id}/mavros/local_position/pose', PoseStamped)
+        # self.pose_sub = Subscriber(f'/{vehicle_id}/mavros/local_position/pose', PoseStamped)
+        self.pose_sub = Subscriber(f'/{vehicle_id}/mavros/vision_pose/pose', PoseStamped)
 
         # 同步订阅
         self.sync = ApproximateTimeSynchronizer(
             [self.image_sub, self.camera_info_sub, self.pose_sub],
-            queue_size=10,
+            queue_size=3,
             slop=0.1
         )
         self.sync.registerCallback(self.synchronized_callback)
@@ -216,36 +212,15 @@ class ObjectTrackingHoverNode:
         with self.drone_pose_lock:
             self.drone_pose = pose_msg
 
-        if not self.image_queue.full():
-            self.image_queue.put(image_msg)
-        else:
-            try:
-                self.image_queue.get_nowait()
-                self.image_queue.put(image_msg)
-            except:
-                pass
+            if not self.image_queue.full():
+                self.image_queue.put((image_msg, pose_msg))
+            else:
+                try:
+                    self.image_queue.get_nowait()
+                    self.image_queue.put((image_msg, pose_msg))
+                except Exception as e:
+                    rospy.logwarn(f"Queue put error: {e}")
             
-    def _publish_worker(self):
-        while not rospy.is_shutdown():
-            try:
-                result = self.result_queue.get(timeout=1.0)
-                object_type = result['type']
-                world_coords = result['world_coords']
-
-                if object_type in self.target_3d_queues:
-                    self.target_3d_queues[object_type].append(world_coords)
-                    
-                    target_q = self.target_3d_queues[object_type]
-                    if len(target_q) > 0:
-                        smoothed_position = np.mean(target_q, axis=0)
-                        # 平滑后的目标信息，包含位置和类型
-                        self.smoothed_target_info = {
-                            'position': smoothed_position,
-                            'type': object_type
-                        }
-            except Empty:
-                continue
-
     def _detection_worker(self):
         """图像处理工作线程"""
         while not rospy.is_shutdown():
@@ -253,17 +228,13 @@ class ObjectTrackingHoverNode:
                 if not self.start_tracking:
                     rospy.sleep(0.1)
                     continue
-                    
-                msg = self.image_queue.get(timeout=1.0)
                 
-                # 检查必要数据
                 with self.camera_info_lock:
                     if self.camera_info is None:
                         continue
-                with self.drone_pose_lock:
-                    if self.drone_pose is None:
-                        continue
-                
+            
+                msg, cam_pose = self.image_queue.get(timeout=1.0)
+
                 cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
                 results = self.model(source=cv_image, verbose=False)
                 
@@ -282,7 +253,7 @@ class ObjectTrackingHoverNode:
                             best_conf = conf
                             u_pixel = (x1 + x2) / 2
                             v_pixel = (y1 + y2) / 2
-                            world_coords = self.get_target_position(u_pixel, v_pixel)
+                            world_coords = self.get_target_position(u_pixel, v_pixel, cam_pose.pose)
                             
                             if world_coords is not None:
                                 best_target = {
@@ -684,7 +655,7 @@ class ObjectTrackingHoverNode:
         ray_world = R_world_body @ ray_body
         return self.normalize(ray_world)
 
-    def get_target_position(self, u, v, ground_z=0.0):
+    def get_target_position(self, u, v, pose, ground_z=0.0):
         if self.camera_info is None or self.drone_pose is None:
             return None
             
@@ -692,20 +663,10 @@ class ObjectTrackingHoverNode:
         ray_cam = self.pixel_to_camera_ray(u, v)
 
         # 相机方向转世界坐标方向向量
-        pose = self.drone_pose.pose
         ray_world = self.camera_ray_to_world(ray_cam, pose.orientation)
 
         # 计算相机在世界坐标系中的位置
-        cam_offset = self.T_cam2body[:3, 3]
-        R_world_body = quaternion_matrix([pose.orientation.x,
-                                          pose.orientation.y,
-                                          pose.orientation.z,
-                                          pose.orientation.w])[:3, :3]
-        drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        v1 = np.array([2.52, 2.67, 0.1])
-        v2 = np.array([0, 0, 0])
-        #drone_position = drone_position + v1 + v2
-        cam_position = drone_position + R_world_body @ cam_offset
+        cam_position = np.array([pose.position.x, pose.position.y, pose.position.z])
 
         # 计算射线与地面的交点
         t = (ground_z - cam_position[2]) / ray_world[2]

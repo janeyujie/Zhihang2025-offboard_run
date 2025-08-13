@@ -52,7 +52,7 @@ class ObjectTrackingHoverNode:
         
         rospack = rospkg.RosPack()
         pkg_path = rospack.get_path('offboard_run')
-        model_path = os.path.join(pkg_path, 'models', 'stage2.pt')
+        model_path = os.path.join(pkg_path, 'models', 'red.pt')
         self.model = YOLO(model_path)
         
         # PID控制器参数调整
@@ -207,11 +207,11 @@ class ObjectTrackingHoverNode:
             self.drone_pose = pose_msg
 
         if not self.image_queue.full():
-            self.image_queue.put(image_msg)
+            self.image_queue.put((image_msg, pose_msg))
         else:
             try:
                 self.image_queue.get_nowait()
-                self.image_queue.put(image_msg)
+                self.image_queue.put((image_msg, pose_msg))
             except:
                 pass
 
@@ -223,15 +223,11 @@ class ObjectTrackingHoverNode:
                     rospy.sleep(0.1)
                     continue
                     
-                msg = self.image_queue.get(timeout=1.0)
-                
-                # 检查必要数据
                 with self.camera_info_lock:
                     if self.camera_info is None:
                         continue
-                with self.drone_pose_lock:
-                    if self.drone_pose is None:
-                        continue
+                
+                msg, drone_pose = self.image_queue.get(timeout=1.0)
                 
                 cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
                 results = self.model(source=cv_image, verbose=False)
@@ -251,7 +247,7 @@ class ObjectTrackingHoverNode:
                             best_conf = conf
                             u_pixel = (x1 + x2) / 2
                             v_pixel = (y1 + y2) / 2
-                            world_coords = self.get_target_position(u_pixel, v_pixel)
+                            world_coords = self.get_target_position(u_pixel, v_pixel, drone_pose)
                             
                             if world_coords is not None:
                                 best_target = {
@@ -536,7 +532,7 @@ class ObjectTrackingHoverNode:
         ray_world = R_world_body @ ray_body
         return self.normalize(ray_world)
 
-    def get_target_position(self, u, v, ground_z=0.0):
+    def get_target_position(self, u, v, pose, ground_z=0.0):
         if self.camera_info is None or self.drone_pose is None:
             return None
             
@@ -544,7 +540,6 @@ class ObjectTrackingHoverNode:
         ray_cam = self.pixel_to_camera_ray(u, v)
 
         # 相机方向转世界坐标方向向量
-        pose = self.drone_pose.pose
         ray_world = self.camera_ray_to_world(ray_cam, pose.orientation)
 
         # 计算相机在世界坐标系中的位置
