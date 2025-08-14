@@ -162,7 +162,7 @@ class ScoringSystem:
         self.compare_and_score(
             label='first_man',
             pose=msg,
-            model_name='person_red',
+            model_name='landing_red',
             score_formula=lambda D, max_dist, w: (100 - 10 * D) * w if D <= max_dist else 0,
             max_dist=10,
             score_weight=0.1
@@ -174,7 +174,7 @@ class ScoringSystem:
         self.compare_and_score(
             label='second_man',
             pose=msg,
-            model_name='person_yellow',
+            model_name='landing_yellow',
             score_formula=lambda D, max_dist, w: (100 - 10 * D) * w if D <= max_dist else 0,
             max_dist=10,
             score_weight=0.1
@@ -186,7 +186,7 @@ class ScoringSystem:
         self.compare_and_score(
             label='third_man',
             pose=msg,
-            model_name='person_white',
+            model_name='landing_white',
             score_formula=lambda D, max_dist, w: (100 - 10 * D) * w if D <= max_dist else 0,
             max_dist=10,
             score_weight=0.1

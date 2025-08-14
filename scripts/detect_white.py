@@ -28,7 +28,6 @@ import copy
 class ObjectTrackingHoverNode:
     def __init__(self):
         rospy.init_node('object_tracking_hover_node', anonymous=True)
-        
         # 队列和锁
         self.image_queue = Queue(maxsize=3)
         self.result_queue = Queue()
@@ -386,7 +385,7 @@ class ObjectTrackingHoverNode:
                     center = self.motion_model['center']
                     radius = self.motion_model['radius']
                     
-                    self.intercept_point = np.array([center[0], center[1] - radius])
+                    self.intercept_point = np.array([center[0], center[1] + radius])
                     #drone_pos_xy = np.array([self.drone_pose.pose.position.x, self.drone_pose.pose.position.y])
                     
                     #vec_to_drone = drone_pos_xy - center
@@ -438,8 +437,8 @@ class ObjectTrackingHoverNode:
                 self.hover()
                 if self.target is not None:
                     pose_msg = Pose()
-                    pose_msg.position.x = self.intercept_point[0] - 1.23
-                    pose_msg.position.y = self.intercept_point[1] + 1
+                    pose_msg.position.x = self.intercept_point[0] + 1
+                    pose_msg.position.y = self.intercept_point[1]
                     pose_msg.position.z = 0.0
                     self.pose_publishers['white'].publish(pose_msg)
                     rospy.loginfo(f"SUCCESS: Target ['white'] pose ({self.intercept_point[0], self.intercept_point[1]})published.")
