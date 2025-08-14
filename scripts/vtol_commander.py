@@ -151,6 +151,7 @@ class Commander:
                 try:
                     if self.arming_client(True).success:
                         rospy.loginfo("Vehicle armed")
+                        self.xtdrone_cmd_pub.publish("ARM")
                 except rospy.ServiceException as e:
                     rospy.logerr("Service call for arming failed: %s" % e)
                 last_request = current_time
@@ -158,6 +159,7 @@ class Commander:
             # 检查是否成功
             if self.current_state.mode == "OFFBOARD" and self.current_state.armed:
                 rospy.loginfo("Vehicle is in OFFBOARD mode and armed.")
+                self.xtdrone_cmd_pub.publish("ARM")
                 return True
 
             # 持续发布设定点以保持连接
@@ -364,13 +366,8 @@ class Commander:
         self._switch_to_multirotor()
         rospy.sleep(5) # 给予充足时间让飞行状态稳定下来
 
-        # 步骤3: 稳定悬停
-        rospy.loginfo("Step 3: Commanding stable hold.")
-        self.hold()
-        rospy.sleep(3)
-
-        # 步骤4: 执行自动降落
-        rospy.loginfo("Step 4: Commanding automatic land.")
+        # 步骤3: 执行自动降落
+        rospy.loginfo("Step 3: Commanding automatic land.")
         self.land()
         
         rospy.loginfo("Waiting for landing and disarm...")
@@ -378,10 +375,12 @@ class Commander:
         while not rospy.is_shutdown() and self.current_state.armed:
             if rospy.Time.now() - landing_start_time > rospy.Duration(60.0):
                 self.disarm()
+                self.xtdrone_cmd_pub.publish("DISARM")
                 break 
             rospy.sleep(1)
-
+        self.xtdrone_cmd_pub.publish("DISARM")
         if not self.current_state.armed:
+            self.xtdrone_cmd_pub.publish("DISARM")
             rospy.loginfo("Landed and disarmed successfully. Mission complete.")
             msg = Bool()
             msg.data = True
@@ -431,7 +430,7 @@ if __name__ == "__main__":
         rospy.loginfo("switching to fixed wing mode...")
         rospy.sleep(1)
         
-        # 3. 在固定翼模式下执行所有巡航任务
+        # 在固定翼模式下执行所有巡航任务
         rospy.loginfo("--- Starting Cruise Mission  ---")
         con.change_altitude(40.0)
         con.move(1200, -250, 40.0)

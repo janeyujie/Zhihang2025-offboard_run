@@ -51,8 +51,8 @@ class XTDroneController:
         self.critical_man_reached_pub = rospy.Publisher("/zhihang2025/first_man/reached", Bool, queue_size=1)
         self.healthy_man_reached_pub = rospy.Publisher("/zhihang2025/third_man/reached", Bool, queue_size=1)
         
-        rospy.Subscriber("/zhihang2025/iris_healthy_man/pose", Pose, self._critical_complete_cb)
-        rospy.Subscriber("/zhihang2025/iris_bad_man/pose", Pose, self._healthy_complete_cb)
+        rospy.Subscriber("/zhihang2025/iris_bad_man/pose", Pose, self._critical_complete_cb)
+        rospy.Subscriber("/zhihang2025/iris_healthy_man/pose", Pose, self._healthy_complete_cb)
         
         rospy.wait_for_service("/iris_0/mavros/cmd/arming")
         self.arming_client = rospy.ServiceProxy("/iris_0/mavros/cmd/arming", CommandBool)
@@ -178,7 +178,7 @@ class XTDroneController:
         h = self.current_pose.position.z
         initial_yaw = self.current_yaw
         
-        while self._distance(self.current_pose.position.x, self.current_pose.position.y, x, y) > 3.0:
+        while self._distance(self.current_pose.position.x, self.current_pose.position.y, x, y) > 1.0:
             if rospy.is_shutdown():
                 break
             current_time = rospy.Time.now()
@@ -224,7 +224,7 @@ class XTDroneController:
         target = self.healthy_man_pose.position
         rospy.loginfo("Navigating to HEALTHY person at (%.2f, %.2f)" % (target.x, target.y))
         self.move(target.x, target.y, vel=4)
-        con.change_altitude(5.0)
+        con.change_altitude(8.0)
 
         rospy.loginfo("HEALTHY person reached. Starting to precise landing.")
         self.healthy_man_reached_pub.publish(Bool(True))
@@ -233,7 +233,7 @@ class XTDroneController:
         while not rospy.is_shutdown() and self.healthy_complete == False:
             rospy.sleep(1)
         rospy.loginfo("Searching for HEALTHY person completed... Continue to search critical man...")
-        con.change_altitude(12)
+        con.change_altitude(8.0)
 
     def moving_to_critical(self):
         rospy.loginfo("Waiting for CRITICAL person's location...")
@@ -243,7 +243,7 @@ class XTDroneController:
         target = self.critical_man_pose.position
         rospy.loginfo("Navigating to CRITICAL person at (%.2f, %.2f)" % (target.x, target.y))
         self.move(target.x, target.y, vel=4)
-        con.change_altitude(3.0)
+        con.change_altitude(4.0)
         
         rospy.loginfo("CRITICAL person reached. Starting to precise landing.")
         self.critical_man_reached_pub.publish(Bool(True))
@@ -270,6 +270,23 @@ class XTDroneController:
             rospy.loginfo_throttle(2, "Drone is still in the air...")
             self.rate.sleep()
         rospy.loginfo("Drone has landed.")
+        
+        disarm_start_time = rospy.Time.now()
+        while self.current_state.armed:
+            if rospy.is_shutdown():
+                rospy.logwarn("Shutdown requested during disarm process.")
+                return
+
+            if rospy.Time.now() - disarm_start_time > rospy.Duration(10.0):
+                rospy.logerr("DISARM TIMEOUT! Failed to disarm the vehicle after 30 seconds.")
+                return
+
+            # 每隔2秒发送一次解锁指令，确保飞控能收到
+            rospy.loginfo_throttle(2, "Vehicle is still armed. Sending DISARM command...")
+            self.publish_command('DISARM')
+            
+            self.rate.sleep()
+
         self.publish_command('DISARM')
         rospy.loginfo("Commanding disarm...")
     
@@ -279,7 +296,7 @@ if __name__ == '__main__':
         con = XTDroneController()
         rospy.loginfo("Quadcopter is waiting for part1 completed...")
         rate = rospy.Rate(1)
-        '''while not rospy.is_shutdown() and not con.can_start:
+        while not rospy.is_shutdown() and not con.can_start:
             rospy.loginfo_throttle(10, "Waiting for signal...")
             rate.sleep()
         rospy.loginfo("Signal received! Continuing to part2")
@@ -293,7 +310,7 @@ if __name__ == '__main__':
         con.move(1450, -250, 10)
         con.change_altitude(12)
         
-        #con.moving_to_health()'''
+        con.moving_to_health()
         con.moving_to_critical()
         
         con.move(1450, 250, 10)
@@ -303,3 +320,4 @@ if __name__ == '__main__':
         
     except rospy.ROSInterruptException:
         pass
+
