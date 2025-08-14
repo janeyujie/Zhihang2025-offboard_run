@@ -173,22 +173,22 @@ class ObjectLocalizationNode:
         if object_type == "red" and len(queue) > 5: # and u > 320 and u < 960 and v > 180 and v < 540
             smoothed_position = np.mean(queue, axis=0)
             pose_msg = Pose()
-            pose_msg.position.x = smoothed_position[0] - 3
+            pose_msg.position.x = smoothed_position[0]
             pose_msg.position.y = smoothed_position[1]
             pose_msg.position.z = smoothed_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
             rospy.loginfo(f"Published smoothed position for {object_type}: {smoothed_position}")
         if object_type == "yellow" and u > 320 and u < 960 and v > 180 and v < 540: # 保证黄色和红色识别的时候在整个视界的中心矩形区域内，减少计算误差
             pose_msg = Pose()
-            pose_msg.position.x = target_position[0] - 3
-            pose_msg.position.y = target_position[1] + 1.5
+            pose_msg.position.x = target_position[0]
+            pose_msg.position.y = target_position[1]
             pose_msg.position.z = target_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
             rospy.loginfo(f"Published position for {object_type}: {target_position}")
 
         if object_type == "white" and u > 320 and u < 960 and v > 180 and v < 540:
             pose_msg = Pose()
-            pose_msg.position.x = target_position[0] - 1.5
+            pose_msg.position.x = target_position[0]
             pose_msg.position.y = target_position[1]
             pose_msg.position.z = target_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
@@ -230,9 +230,9 @@ class ObjectLocalizationNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        v1 = np.array([2.3, 0.4, 1.3])  # local相对World的偏移
-        v2 = np.array([0, 0, -0.05])    # 相机相对于机体的偏移
-        drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
+        #v1 = np.array([2.3, 0.4, 1.3])  # local相对World的偏移
+        #v2 = np.array([0, 0, -0.05])    # 相机相对于机体的偏移
+        #drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
         # 计算相机在世界坐标系中的位置
         cam_position = drone_position + R_world_body @ cam_offset
 
@@ -243,8 +243,8 @@ class ObjectLocalizationNode:
             return None
 
         target_world = cam_position + t * ray_world
-        v3 = np.array([1.2, -0.5, 0])
-        target_world -= v3 # 人物相对于靶心的偏移, 这里主要是和算分的脚本对齐，并不知道实际算分的时候是怎么样的
+        #v3 = np.array([1.2, -0.5, 0])
+        #target_world -= v3 # 人物相对于靶心的偏移, 这里主要是和算分的脚本对齐，并不知道实际算分的时候是怎么样的
         return target_world
 
     def run(self):
