@@ -162,8 +162,8 @@ class ScoringSystem:
         if self.scored['first_man']: # 虽然红色是 1495, -105 但是还是直接读取，统一形式
             return
         ps = msg
-        ps.position.x -= 0.44
-        ps.position.y += 0.3
+        ps.position.x -= 0.5
+        #ps.position.y += 0.3
         self.compare_and_score(
             label='first_man',
             pose=msg,
@@ -207,7 +207,7 @@ class ScoringSystem:
         if self.scored['healthy']:
             return
         ps = msg
-        ps.position.x -= 0.5 # 靶心偏移
+        ps.position.x += 0.5 # 靶心偏移
         # ps.position.y += 0.5
         self.compare_and_score(
             label='healthy',

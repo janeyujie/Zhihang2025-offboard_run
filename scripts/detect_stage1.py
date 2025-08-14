@@ -54,7 +54,7 @@ class ObjectLocalizationNode:
         # 订阅相机图像和信息
         rospy.Subscriber('/standard_vtol_0/camera/image_raw', Image, self.image_callback, queue_size=10)
         rospy.Subscriber('/standard_vtol_0/camera/camera_info', CameraInfo, self.camera_info_callback, queue_size=10)
-        rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
+        rospy.Subscriber('/standard_vtol_0/mavros/vision_pose/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
         rospy.Subscriber('/standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
         rospy.Subscriber("/standard_vtol_0/search_completed", Bool, self._ending_cb)
         self._init_tf()  # 初始化相机到机体坐标变换矩阵
