@@ -35,7 +35,7 @@ FW_AIRSPD_TRIM 巡航速度
 # 如果小人没加载完全的话要重新启动一次
 roslaunch px4 zhihang2025.launch
 
-# 运行通信脚本 —— 这一步似乎不需要, 直接运行控制脚本就行。
+# 运行通信脚本
 cd ~/XTDrone/communication/
 python3 vtol_communication.py standard_vtol 0
 
@@ -116,7 +116,7 @@ rostopic echo /zhihang2025/third_man/pose
 rostopic echo /zhihang2025/iris_healthy_man/pose
 rostopic echo /zhihang2025/iris_critical_man/pose
 
-rostopic pub -1 /zhihang2025/third_man/pose geometry_msgs/Pose '{position: {x: 1499.08, y: 64.68, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
+rostopic pub -1 /zhihang2025/third_man/pose geometry_msgs/Pose '{position: {x: 1496, y: 0.52, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
 rostopic pub -1 /zhihang2025/first_man/pose geometry_msgs/Pose '{position: {x: 1495.0, y: -105.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'
 rostopic pub -1 /part1_completed std_msgs/Bool "data: true"
 rostopic pub -1 standard_vtol_0/waypoint_reached std_msgs/Bool "data: true"

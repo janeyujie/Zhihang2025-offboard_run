@@ -270,6 +270,23 @@ class XTDroneController:
             rospy.loginfo_throttle(2, "Drone is still in the air...")
             self.rate.sleep()
         rospy.loginfo("Drone has landed.")
+        
+        disarm_start_time = rospy.Time.now()
+        while self.current_state.armed:
+            if rospy.is_shutdown():
+                rospy.logwarn("Shutdown requested during disarm process.")
+                return
+
+            if rospy.Time.now() - disarm_start_time > rospy.Duration(10.0):
+                rospy.logerr("DISARM TIMEOUT! Failed to disarm the vehicle after 30 seconds.")
+                return
+
+            # 每隔2秒发送一次解锁指令，确保飞控能收到
+            rospy.loginfo_throttle(2, "Vehicle is still armed. Sending DISARM command...")
+            self.publish_command('DISARM')
+            
+            self.rate.sleep()
+
         self.publish_command('DISARM')
         rospy.loginfo("Commanding disarm...")
     

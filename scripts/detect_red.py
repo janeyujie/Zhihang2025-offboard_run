@@ -247,7 +247,7 @@ class ObjectTrackingHoverNode:
                             best_conf = conf
                             u_pixel = (x1 + x2) / 2
                             v_pixel = (y1 + y2) / 2
-                            world_coords = self.get_target_position(u_pixel, v_pixel, drone_pose)
+                            world_coords = self.get_target_position(u_pixel, v_pixel, drone_pose.pose)
                             
                             if world_coords is not None:
                                 best_target = {
