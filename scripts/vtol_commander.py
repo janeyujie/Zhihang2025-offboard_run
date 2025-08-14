@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import rospy
 import tf
 import math
@@ -453,4 +450,3 @@ if __name__ == "__main__":
     finally:
         cv2.destroyAllWindows()
         rospy.loginfo("Commander node terminated.")
-

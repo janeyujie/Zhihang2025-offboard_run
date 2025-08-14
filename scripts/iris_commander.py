@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: UTF-8 -*-
-
 import rospy
 import tf
 import math
@@ -128,7 +125,6 @@ class XTDroneController:
         twist_msg.linear.z = upward
         twist_msg.angular.z = angular_z
         self.cmd_vel_pub.publish(twist_msg)
-        #self.offboard()
 
     def offboard(self):
         self.publish_command('OFFBOARD')
@@ -198,8 +194,6 @@ class XTDroneController:
             vel_x = (dx / dis) * vel
             vel_y = (dy / dis) * vel
             
-            #target_yaw = math.atan2(dy, dx)
-            #d_yaw = target_yaw - self.current_yaw
             d_yaw = initial_yaw - self.current_yaw
             if d_yaw > math.pi:
                 d_yaw -= 2 * math.pi
@@ -290,7 +284,6 @@ class XTDroneController:
         self.publish_command('DISARM')
         rospy.loginfo("Commanding disarm...")
     
-
 if __name__ == '__main__':
     try:
         con = XTDroneController()
@@ -320,4 +313,3 @@ if __name__ == '__main__':
         
     except rospy.ROSInterruptException:
         pass
-
