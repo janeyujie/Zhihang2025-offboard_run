@@ -14,7 +14,6 @@ from ultralytics import YOLO
 import numpy as np
 from tf.transformations import euler_from_quaternion, quaternion_matrix
 from scipy.spatial.transform import Rotation as R
-# from offboard_run.msg import Object3DStamped # 注释掉自定义消息，使用标准消息
 import threading 
 from queue import Queue, Empty
 import queue
@@ -55,14 +54,6 @@ class ObjectTrackingHoverNode:
         model_path = os.path.join(pkg_path, 'models', 'red.pt')
         self.model = YOLO(model_path)
         
-        # PID控制器参数调整
-        self.pid_x = PID(Kp=2.5, Ki=0.3, Kd=0.8, setpoint=0)
-        self.pid_y = PID(Kp=2.5, Ki=0.3, Kd=0.8, setpoint=0)
-        self.pid_z = PID(Kp=1.5, Ki=0.2, Kd=0.5, setpoint=0)
-        self.pid_x.output_limits = (-2.0, 2.0)
-        self.pid_y.output_limits = (-2.0, 2.0)
-        self.pid_z.output_limits = (-1.0, 1.0)
-        
         # 速率
         self.image_rate = rospy.Rate(20)
         self.control_rate = rospy.Rate(20)
@@ -76,7 +67,7 @@ class ObjectTrackingHoverNode:
         
         self.landing_state = "SEARCHING"  # Initial state: SEARCHING, ALIGNING, DESCENDING
         self.center_tolerance_px = 45     # 中心区域的容忍度（像素），+/- 20像素
-        self.center_low = 15
+        self.center_low = 15              # 
         self.descend_speed_ms = -0.8      # 下降速度 (m/s)，负数表示向下
         self.final_altitude_m = 0.5       # 最终悬停高度 (m)
 
@@ -125,8 +116,6 @@ class ObjectTrackingHoverNode:
         
         # 开始信号订阅
         rospy.Subscriber('/zhihang2025/first_man/reached', Bool, self._start_tracking_cb)
-        #rospy.Subscriber('/zhihang2025/third_man/reached', Bool, self._start_tracking_cb)
-        #rospy.Subscriber('/start_tracking', Bool, self._start_tracking_cb)
         rospy.Subscriber('/zhihang2025/first_man/pose', Pose, self._target_pose_cb)
 
     def _init_publishers(self):
@@ -197,7 +186,6 @@ class ObjectTrackingHoverNode:
                 self.camera_info = camera_info_msg
                 self.camera_matrix = np.array(camera_info_msg.K).reshape((3, 3))
                 self.dist_coeffs = np.array(camera_info_msg.D)
-                # ADDED: Get camera center from camera info
                 self.camera_center_x = self.camera_matrix[0, 2]
                 self.camera_center_y = self.camera_matrix[1, 2]
                 rospy.loginfo(f"Camera center initialized to ({self.camera_center_x}, {self.camera_center_y})")
@@ -316,14 +304,9 @@ class ObjectTrackingHoverNode:
                 rospy.sleep(0.1)
                 continue
 
-            '''with self.target_lock:
-                target_found_local = self.target_found
-                target_local = self.target'''
-
             # ------------------ 状态机逻辑 ------------------
             self._ensure_offboard_mode()
             vel = 0.5
-            #current_altitude = self.current_pos.position.z
             current_altitude = self.drone_pose.pose.position.z
             if current_altitude <= 1.0:
                 if not self.target_pose_published and current_altitude <= 0.5:
@@ -344,8 +327,6 @@ class ObjectTrackingHoverNode:
             if self.target is None:
                 self.landing_state = "SEARCHING"
                 rospy.loginfo_throttle(2, f"State: {self.landing_state} - No target detected. Hovering.")
-                #self.move(self.critial_pose.position.x, self.critial_pose.position.y, 1.0)
-                #self.hover()
                 dx = self.critial_pose.position.x - self.drone_pose.pose.position.x
                 dy = self.critial_pose.position.y - self.drone_pose.pose.position.y
                 dist_to_search = math.sqrt(dx**2 + dy**2)
@@ -368,7 +349,6 @@ class ObjectTrackingHoverNode:
                 continue
 
             # 获取当前高度和目标像素位置
-            
             target_u = self.target['u_pixel']
             target_v = self.target['v_pixel']
 
@@ -429,7 +409,6 @@ class ObjectTrackingHoverNode:
         if not hasattr(self, '_last_mode_request'):
             self._last_mode_request = rospy.Time.now()
         self.publish_command('OFFBOARD')
-        #rospy.loginfo("Commanding offboard...")
 
     def _distance(self, x1, y1, x2, y2):
         return math.sqrt(math.pow(x1 - x2, 2) + math.pow(y1 - y2, 2))
@@ -443,19 +422,7 @@ class ObjectTrackingHoverNode:
 
     def _publish_velocity_command(self, vx=0.0, vy=0.0, vz=0.0, az=0.0):
         """发布速度指令到MAVROS,发布速度指令 (机体坐标系：前左上)"""
-        # 使用TwistStamped消息
-        '''twist_stamped = TwistStamped()
-        twist_stamped.header.stamp = rospy.Time.now()
-        twist_stamped.header.frame_id = "base_link"
-        twist_stamped.twist.linear.x = vx
-        twist_stamped.twist.linear.y = vy
-        twist_stamped.twist.linear.z = vz
-        twist_stamped.twist.angular.x = 0.0
-        twist_stamped.twist.angular.y = 0.0
-        twist_stamped.twist.angular.z = az
-        self.velocity_pub.publish(twist_stamped)'''
-        
-        # 备用：也发布Twist消息
+        # 发布Twist消息
         twist = Twist()
         twist.linear.x = vx
         twist.linear.y = vy
@@ -464,7 +431,6 @@ class ObjectTrackingHoverNode:
         twist.angular.y = 0.0
         twist.angular.z = az
         self.mavros_vel_pub.publish(twist)
-        #rospy.loginfo(f"Published twist: {twist}")
 
     def move(self, x, y, vel):
         # 以vel大小的速度水平移动到坐标(x,y)
@@ -493,8 +459,6 @@ class ObjectTrackingHoverNode:
             vel_x = (dx / dis) * vel
             vel_y = (dy / dis) * vel
             
-            #target_yaw = math.atan2(dy, dx)
-            #d_yaw = target_yaw - self.current_yaw
             d_yaw = initial_yaw - self.current_yaw
             if d_yaw > math.pi:
                 d_yaw -= 2 * math.pi
@@ -571,7 +535,6 @@ class ObjectTrackingHoverNode:
 if __name__ == '__main__':
     try:
         node = ObjectTrackingHoverNode()
-        #node.run()
         rate = rospy.Rate(1)
         rospy.loginfo("Object Tracking Hover Node is running...")
         rospy.loginfo("Waiting for /first_man reached signal to begin target tracking...")
@@ -591,6 +554,3 @@ if __name__ == '__main__':
         rospy.loginfo("Object Tracking Hover node terminated.")
         cv2.destroyAllWindows()
         exit(0)
-
-
-

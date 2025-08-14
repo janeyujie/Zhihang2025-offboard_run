@@ -92,6 +92,7 @@ class ScoringSystem:
                 if self.check_rotor_zone(fx, fy):
                     self.fixed_landed = True # 0分
                     self.fixed_landed_time = rospy.get_time()
+            # if not self.check_rotor_zone(fx, fy) and :
         # 四旋翼B
         if 'iris_0' in names:
             idx = names.index('iris_0')
@@ -126,6 +127,7 @@ class ScoringSystem:
             if self.rotor_landed and self.check_rotor_zone(self.rotor_start['x'], self.rotor_start['y']) and self.scores['healthy'] and self.scores['bad']:
                 self.task_completed = True  # 标记任务完成
 
+    # 直接对比对象是模型坐标，实际需要对pose进行一定变换
     def compare_and_score(self, label, pose, model_name, score_formula, max_dist, score_weight, height_limit=None):
         if self.model_states is None or self.scored[label]:
             return
@@ -159,6 +161,9 @@ class ScoringSystem:
     def first_man_callback(self, msg):
         if self.scored['first_man']: # 虽然红色是 1495, -105 但是还是直接读取，统一形式
             return
+        ps = msg
+        ps.position.x -= 0.44
+        ps.position.y += 0.3
         self.compare_and_score(
             label='first_man',
             pose=msg,
@@ -171,6 +176,9 @@ class ScoringSystem:
     def second_man_callback(self, msg):
         if self.scored['second_man']:
             return
+        ps = msg
+        # ps.position.x -= 0.44
+        # ps.position.y += 0.3
         self.compare_and_score(
             label='second_man',
             pose=msg,
@@ -183,6 +191,9 @@ class ScoringSystem:
     def third_man_callback(self, msg):
         if self.scored['third_man']:
             return
+        ps = msg
+        # ps.position.x -= 0.44
+        # ps.position.y += 0.3
         self.compare_and_score(
             label='third_man',
             pose=msg,

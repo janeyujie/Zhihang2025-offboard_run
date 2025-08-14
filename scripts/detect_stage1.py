@@ -55,7 +55,6 @@ class ObjectLocalizationNode:
         rospy.Subscriber('/standard_vtol_0/camera/image_raw', Image, self.image_callback, queue_size=10)
         rospy.Subscriber('/standard_vtol_0/camera/camera_info', CameraInfo, self.camera_info_callback, queue_size=10)
         rospy.Subscriber('/standard_vtol_0/mavros/local_position/pose', PoseStamped, self.drone_pose_callback, queue_size=1)
-        # rospy.Subscriber('/standard_vtol_0/mavros/vision_pose/pose', PoseStamped, self.drone_pose_callback, queue_size=1) 这个话题并没信息？？
         rospy.Subscriber('/standard_vtol_0/waypoint_reached', Bool, self._reached_cb)
         rospy.Subscriber("/standard_vtol_0/search_completed", Bool, self._ending_cb)
         self._init_tf()  # 初始化相机到机体坐标变换矩阵
@@ -80,8 +79,8 @@ class ObjectLocalizationNode:
         self.T_cam2body[:3, 3] = [0.0, 0.0, -0.03]  # 相机在无人机下方 3cm, check .sdf
     
     def camera_info_callback(self, msg):
-        self.camera_info = msg
         # 提取相机内参矩阵 K 和畸变系数 D
+        self.camera_info = msg
         self.camera_matrix = np.array(msg.K).reshape((3, 3))
         self.dist_coeffs = np.array(msg.D)
 
@@ -179,7 +178,7 @@ class ObjectLocalizationNode:
             pose_msg.position.z = smoothed_position[2]
             self.pose_publishers[object_type].publish(pose_msg)
             rospy.loginfo(f"Published smoothed position for {object_type}: {smoothed_position}")
-        if object_type == "yellow" and u > 320 and u < 960 and v > 180 and v < 540: # 保证黄色和红色识别的时候在整个视界的中心矩形区域内
+        if object_type == "yellow" and u > 320 and u < 960 and v > 180 and v < 540: # 保证黄色和红色识别的时候在整个视界的中心矩形区域内，减少计算误差
             pose_msg = Pose()
             pose_msg.position.x = target_position[0] - 3
             pose_msg.position.y = target_position[1] + 1.5
@@ -231,12 +230,11 @@ class ObjectLocalizationNode:
                                           pose.orientation.z,
                                           pose.orientation.w])[:3, :3]
         drone_position = np.array([pose.position.x, pose.position.y, pose.position.z])
-        v1 = np.array([2.3, 0.4, 1.3]) # local相对World的偏移
-        v2 = np.array([0, 0, -0.05]) # 相机相对于机体的偏移
+        v1 = np.array([2.3, 0.4, 1.3])  # local相对World的偏移
+        v2 = np.array([0, 0, -0.05])    # 相机相对于机体的偏移
         drone_position = drone_position + v1 + v2  # 假设无人机位置偏移
         # 计算相机在世界坐标系中的位置
         cam_position = drone_position + R_world_body @ cam_offset
-        # rospy.loginfo(f"{self.drone_pose}, {self.T_cam2body}, {self.camera_info}, ")
 
         # Step 4: 计算 ray 与地面 Z=ground_z 的交点 t = -z / dz
         t = (ground_z - cam_position[2]) / ray_world[2]
