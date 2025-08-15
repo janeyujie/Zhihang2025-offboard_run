@@ -1,0 +1,465 @@
+\documentclass[12pt]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{geometry}
+\geometry{a4paper, margin=2cm}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb,amsthm,amsfonts}
+
+\setmainfont{Times New Roman}
+\setmonofont{Consolas}
+
+% 代码块样式设置
+\lstset{
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    tabsize=4,
+    backgroundcolor=\color{white}
+}
+
+% 标题格式设置
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\bfseries}{\thesubsubsection}{1em}{}
+
+\begin{document}
+
+% 标题页
+\begin{titlepage}
+    \centering
+    
+    \vspace*{1cm}
+    {\fontsize{24pt}{0}\selectfont 第十九届“挑战杯”全国大学生课外学术科技作品竞赛“揭榜挂帅”专项赛}
+    
+    \vspace{1.5cm}
+    {\fontsize{24pt}{0}\selectfont 项目设计报告}
+    
+    \vspace{2cm}
+    {\fontsize{18pt}{0}\selectfont 选题名称}
+    
+    \vspace{0.5cm}
+    {\fontsize{14pt}{0}\selectfont SH-10 无人机双机协同自主搜救任务}
+    
+    \vspace{2cm}
+    {\fontsize{18pt}{0}\selectfont 作品名称}
+    
+    \vspace{0.5cm}
+    {\fontsize{14pt}{0}\selectfont 面向自主搜救任务的双机系统智能决策算法研究}
+    
+    \vspace{2cm}
+    {\fontsize{18pt}{0}\selectfont 学校}
+    
+    \vspace{0.5cm}
+    {\fontsize{14pt}{0}\selectfont 北京航空航天大学}
+    
+    \vspace{2cm}
+    {\fontsize{18pt}{0}\selectfont 成员}
+    
+    \vspace{0.5cm}
+    {\fontsize{14pt}{0}\selectfont 郑宇杰、传真奇、张家文、杨佳宇轩}
+    
+    \vfill
+    \large \today
+\end{titlepage}
+
+% 目录
+\tableofcontents
+\newpage
+
+% 1. 项目简介
+\section{项目简介}
+本项目聚焦于“无人机双机协同自主搜救”这一前沿挑战，设计并实现了一套面向复杂动态环境的异构无人机协同智能决策系统。系统由一架垂起固定翼无人机（VTOL）作为广域侦察单元和一架四旋翼无人机作为精准响应单元构成。
+
+任务流程分为两个核心阶段：
+\begin{itemize}
+    \item \textbf{阶段一：} VTOL无人机利用其航程远、效率高的优势，在大范围内执行自主航路规划、动态模式切换、躲避禁飞区及多目标实时感知任务，通过搭载的YOLOv8视觉感知模块，实现对三类模拟人员的精确识别与世界坐标解算。
+    \item \textbf{阶段二：} 在完成侦察并回传目标数据后，四旋翼无人机接替任务，基于接收到的目标信息执行高精度路径规划与末端视觉伺服控制，分别对静态及动态目标进行稳定追踪与抵近，最终在要求的高度上，完成关键信息的精确发布，全过程无需人工干预。
+\end{itemize}
+
+% 2. 项目背景
+\section{项目背景}
+无人机技术在环境监测、应急通信和抢险救灾等领域的应用正迅速深化。尤其在灾后搜救等复杂场景中，地面人员往往面临视野受限、地形阻碍及二次坍塌等重大安全风险。无人机凭借其空中优势，能够快速获取全局态势，显著提升搜救效率并降低人员风险。
+
+然而，单一无人机平台难以兼顾大范围搜索效率与近距离精准操作的需求。为此，\textbf{异构双机协同}已成为解决此类复杂任务的前沿范式。该模式利用：
+\begin{itemize}
+    \item VTOL无人机兼具多旋翼垂直起降灵活性与固定翼长航时巡航能力的特点，执行广域快速扫描
+    \item 四旋翼无人机优越的悬停与机动性能，执行抵近侦察与精准任务操作
+\end{itemize}
+
+本项目正是在此背景下，针对包含禁飞区、多类别动态/静态目标识别以及双机任务交接的复杂协同搜救场景，研发一套高效、鲁棒的智能决策与控制算法，旨在验证并提升异构无人机集群在该类任务中的自主协同作业能力。
+
+% 3. 项目目标
+\section{项目目标}
+本项目的核心目标是设计、实现并验证一套应用于异构双机协同搜救任务的\textbf{智能决策与控制算法}。该系统旨在模拟真实搜救场景，验证无人机在GPS信号存在噪声、目标部分动态的挑战下，从起飞到任务完成的全流程自主作业能力。
+
+具体子目标分解如下：
+\begin{enumerate}
+    \item \textbf{高层任务规划与导航：} 实现 VTOL 无人机的全自主起降、飞行模式无缝切换，以及融合了禁飞区的全局路径规划与航点跟踪能力。
+    \item \textbf{实时环境感知与目标定位：} 开发基于 YOLOv8 的机载视觉感知模块，实现对多类别目标的实时检测、分类，并构建从像素坐标到全局地理坐标的精确解算模型。
+    \item \textbf{动态目标追踪与运动预测：} 针对动态目标，设计一套轨迹数据采样与运动模型拟合算法，实现对目标未来位置的有效预测，为精准拦截提供决策依据。
+    \item \textbf{末端精准伺服与信息发布：} 为四旋翼无人机开发基于视觉反馈的闭环伺服控制算法，实现对目标的稳定抵近、对心悬停，并在满足竞赛规则的高度与精度要求下，完成关键信息的发布。
+\end{enumerate}
+
+% 4. 项目实施
+\section{项目实施}
+\subsection{阶段一：任务启动与广域巡航}
+无人机A (\texttt{standard\_vtol\_0}) 执行任务初始化序列：
+\begin{enumerate}
+    \item 以多旋翼模式垂直起飞至预定安全高度
+    \item 执行\textbf{多旋翼至固定翼的飞行模式转换}
+    \item 激活全局路径规划模块，结合禁飞区约束，生成绕开禁飞区的无碰撞航路
+    \item 飞抵指定的GPS引导点
+\end{enumerate}
+
+\subsection{阶段二：目标搜索、识别与信息共享}
+抵达GPS引导点后：
+\begin{itemize}
+    \item 无人机A进入搜索模式，执行预设的覆盖式路径规划航线确保对指定搜索区域的完全覆盖
+    \item 激活\textbf{机载视觉感知模块}（基于YOLOv8），对视频流实时处理，检测分类三类目标（危重、轻伤、健康）
+    \item 通过坐标解算算法获取目标全局Pose，并通过ROS话题发布（实现与无人机B的机间数据链模拟）
+    \item 完成目标搜索与信息发布后，自主返航至旋翼模式区
+    \item 执行固定翼至多旋翼模式转换，垂直降落并自动锁桨
+\end{itemize}
+
+\subsection{阶段三：精准抵近与末端作业}
+无人机A安全着陆后，无人机B (\texttt{iris\_0}) 自动解锁起飞：
+\begin{itemize}
+    \item 任务规划模块根据接收目标信息决策，规划前往健康人员（动态目标）的航路
+    \item 抵达目标区域后，激活\textbf{末端视觉引导系统}：
+    \begin{itemize}
+        \item \textbf{健康人员：} 进入目标状态估计阶段，通过连续视觉检测采样拟合运动轨迹，建立运动模型，计算最优拦截点并前出至该点上空，下降至0.7米高度等待目标进入指定区域后发布平台坐标
+        \item \textbf{重伤人员：} 激活视觉伺服控制逻辑，采用"对准-下降"递进策略，通过闭环控制修正水平位置，确保精确位于目标正上方，逐步下降至0.5米高度发布坐标
+    \end{itemize}
+\end{itemize}
+
+\subsection{阶段四：任务完成与返航}
+无人机B完成对两个指定目标的任务后：
+\begin{enumerate}
+    \item 执行返航程序，自主飞行返回旋翼模式区
+    \item 执行自动降落、锁桨
+    \item 标志着整个协同搜救任务的圆满完成
+\end{enumerate}
+
+% 5. 项目结构
+\section{项目结构}
+\subsection{项目文件结构}
+项目的所有文件位于工作区 \texttt{catkin\_ws/src/offboard\_run} 下：
+\begin{lstlisting}[language=bash]
+.
+├── CMakeLists.txt
+├── README.md
+├── models
+│   ├── red.pt
+│   ├── stage1.pt
+│   ├── stage2.pt
+│   └── white.pt
+├── msg
+├── package.xml
+├── score_check.py
+├── scripts
+│   ├── __pycache__
+│   ├── detect_red.py
+│   ├── detect_stage1.py
+│   ├── detect_white.py
+│   ├── iris_commander.py
+│   ├── launch.sh
+│   └── vtol_commander.py
+└── src
+\end{lstlisting}
+
+\subsection{部分介绍}
+\texttt{src/offboard\_run} 目录包含主要的 ROS 包和代码文件：
+
+\begin{itemize}
+    \item \texttt{scripts} 目录包含Python脚本：
+    \begin{itemize}
+        \item \texttt{vtol\_commander.py}: 固定翼无人机A阶段一和阶段二的起飞、搜索巡航、返回并降落的控制
+        \item \texttt{detect\_stage1.py}: 固定翼无人机A阶段二的视觉识别，使用YOLOv8进行目标识别与坐标转换
+        \item \texttt{iris\_commander.py}: 四旋翼无人机B阶段三和阶段四的起飞，接近目标、返回并降落的控制
+        \item \texttt{detect\_white.py}: 四旋翼无人机B阶段三的健康人员视觉识别和精确降落控制
+        \item \texttt{detect\_red.py}: 四旋翼无人机B阶段三的重伤人员视觉识别和精确降落控制
+    \end{itemize}
+    \item \texttt{CMakeLists.txt}: 配置项目的CMake构建系统
+    \item \texttt{package.xml}: 描述ROS包的元数据文件
+    \item \texttt{models}: 包含YOLOv8模型文件，用于目标检测
+    \item \texttt{launch.sh}: 一键启动整个项目的脚本
+    \item \texttt{score\_check.py}: 模拟评分的脚本
+\end{itemize}
+
+% 6. 开发过程
+\section{开发过程}
+\subsection{整体流程}
+开发过程分为以下步骤：
+\begin{enumerate}
+    \item 配置环境，学习ROS语法知识
+    \item 初步尝试无人机飞行，实现基本控制功能
+    \item 模块划分：
+    \begin{itemize}
+        \item 固定翼无人机：导航控制与视觉识别
+        \item 四旋翼无人机：导航控制与精确降落
+    \end{itemize}
+    \item 完成两个无人机四个阶段的话题衔接
+    \item 整合测试
+\end{enumerate}
+
+\subsection{项目分工}
+按照任务类型划分：
+\begin{itemize}
+    \item \textbf{无人机飞行控制组} (2人):
+    \begin{itemize}
+        \item 固定翼无人机起飞，飞行控制，避障与搜索路径规划
+        \item 四旋翼无人机起飞，飞行控制，避障路径规划，接近目标
+    \end{itemize}
+    \item \textbf{视觉识别组} (2人):
+    \begin{itemize}
+        \item 视觉识别，坐标转换
+        \item 视觉模型的数据采集与训练
+        \item 根据视觉识别结果实现精确降落
+    \end{itemize}
+\end{itemize}
+
+% 7. 文件说明
+\section{文件说明}
+\subsection{vtol\_commander.py（阶段一）}
+用于固定翼无人机的导航控制，实现：
+\begin{itemize}
+    \item 根据GPS坐标点绕过禁飞区到达目标区域
+    \item 激活第一阶段的视觉识别进程
+    \item 目标搜索
+\end{itemize}
+
+\subsubsection{整体路线预览}
+\begin{center}
+    \includegraphics[width=0.8\textwidth]{./resources/3.png}
+\end{center}
+
+\subsubsection{起飞降落逻辑}
+\begin{itemize}
+    \item 多旋翼模式起飞到20米高度
+    \item 切换为固定翼模式执行任务
+    \item 返回旋翼模式区切换回多旋翼模式并降落锁桨
+\end{itemize}
+\begin{center}
+    \includegraphics[width=0.6\textwidth]{./resources/4.png}
+    \includegraphics[width=0.6\textwidth]{./resources/5.png}
+\end{center}
+
+\subsubsection{避障策略}
+\begin{itemize}
+    \item 保持安全距离绕开禁飞区
+    \item 设置较高飞行速度避免碰撞
+\end{itemize}
+\begin{center}
+    \includegraphics[width=0.6\textwidth]{./resources/1.png}
+\end{center}
+
+\subsection{detect\_stage1.py（阶段二）}
+实现利用vtol无人机遥感数据进行目标识别定位：
+\begin{itemize}
+    \item 数据读取：使用消息队列保存同一时刻的图像和位置信息
+    \item 识别功能：基于YOLOv8模型实时检测和分类目标
+    \item 坐标计算：基于遥感坐标转换模型计算物体具体坐标
+    \item 数据处理：静止目标使用均值滤波，运动目标选择靠近图像中心的坐标
+\end{itemize}
+
+\textbf{视觉识别模型：}
+\begin{enumerate}
+    \item 采集飞行遥感数据：
+    
+    利用 save.py 脚本对遥感数据进行采集
+    
+    \item 标注遥感数据：
+    
+    利用 \href{https://app.roboflow.com/join/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ3b3Jrc3BhY2VJZCI6IlQ4VGZpZ0FqQkdOMWIzT1pITjNNMUJ3dDNoazIiLCJyb2xlIjoib3duZXIiLCJpbnZpdGVyIjoiaGFpa2U4MjZAZ21haWwuY29tIiwiaWF0IjoxNzUzNjc5NTUzfQ.ksRN2pjtnuXkUIybOxv0PoRmLFUzQssGo_Zjj3tStE0}{Roboflow平台} 进行数据标注
+    
+    \item 对基础模型进行再训练：
+    \item 利用训练好的模型：
+    
+    详情见于源码
+    
+\end{enumerate}
+
+\textbf{遥感坐标转换模型：}
+\begin{enumerate}
+    \item 像素坐标转相机方向向量：
+    \[
+    \mathbf{p}_{\rm cam} = K^{-1} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = \begin{bmatrix} (u - c_x) / f_x \\ (v - c_y) / f_y \\ 1 \end{bmatrix}
+    \]
+    \item 相机坐标系到机体坐标系：
+    \[
+    \mathbf{p}_{\rm body} = R_{\rm cam\to body}\,\mathbf{p}_{\rm cam} + \mathbf{t}_{\rm cam\to body}
+    \]
+    \item 机体坐标系到世界坐标系：
+    \[
+    \mathbf{p}_{\rm target} = \mathbf{p}_{\rm UAV} + R_{\rm body\to world}\,\mathbf{p}_{\rm body}
+    \]
+    \item 三维坐标计算（射线与地面交点）：
+    \[
+    t = \frac{ground_z - cam_z}{ray_{world}[2]}, \quad P = Cam_{position} + t \cdot ray_{world}
+    \]
+    \item 误差修正：
+    \[
+    P = P + v_{error}
+    \]
+\end{enumerate}
+
+\subsection{iris\_commander.py（阶段三）}
+用于四旋翼无人机的导航控制：
+\begin{itemize}
+    \item 根据阶段二识别的坐标绕过禁飞区
+    \item 激活第四阶段的视觉识别
+    \item 精确定位与降落
+\end{itemize}
+
+\subsubsection{整体路线预览（示例）}
+\begin{center}
+    \includegraphics[width=0.8\textwidth]{./resources/6.png}
+\end{center}
+
+\subsubsection{控制逻辑}
+通过ROS话题直接控制飞行、悬停和移动
+
+\subsubsection{避障策略}
+\begin{center}
+    \includegraphics[width=0.6\textwidth]{./resources/2.png}
+\end{center}
+
+\subsection{detect\_white.py \& detect\_red.py（阶段四）}
+无人机到达目标区域后的递进侦查：
+\begin{itemize}
+    \item \textbf{目标识别线程：}
+    \begin{itemize}
+        \item 保存遥感图像和飞机位姿信息
+        \item 使用YOLOv8模型进行目标标注
+        \item 通过遥感视线模型计算目标位置
+        \item 误差修正和数据同步
+    \end{itemize}
+    \item \textbf{UAV控制线程：}
+    \begin{itemize}
+        \item \textbf{健康人员（动态目标）:}
+        \begin{itemize}
+            \item SEARCHING: 移动到目标位置并下降
+            \item MODELING: 采样并拟合运动轨迹
+            \item INTERCEPTING: 移动到拦截点上方
+            \item DESCENDING\_TO\_WAIT: 下降到0.7米
+            \item WAITING\_FOR\_TARGET: 等待目标通过并发布坐标
+        \end{itemize}
+        \item \textbf{重伤人员（静态目标）:}
+        \begin{itemize}
+            \item SEARCHING: 微调至目标正上方
+            \item ALIGNING: 下降一段距离
+            \item 重复直到下降到0.5米高度发布坐标
+        \end{itemize}
+    \end{itemize}
+\end{itemize}
+
+% 8. 关键代码及注释
+\section{关键代码及注释}
+详见各脚本文件源代码（因篇幅限制，此处省略具体代码）
+
+% 9. 创新点
+\section{创新点}
+\subsection{异构双机协同任务规划与GNC一体化设计}
+\begin{itemize}
+    \item 构建VTOL与四旋翼高效协同架构
+    \item 设计任务分配与信息流交接机制
+    \item 实现任务规划与GNC系统一体化设计
+    \begin{itemize}
+        \item 状态机负责顶层任务决策
+        \item 通过MAVROS接口转化为PX4飞控指令
+    \end{itemize}
+    \item 融入禁飞区规避策略确保飞行安全
+\end{itemize}
+
+\subsection{基于深度学习的多模态视觉感知与精确定位}
+\begin{itemize}
+    \item 集成YOLOv8深度学习模型
+    \item 自定义数据集微调训练（详见\href{https://app.roboflow.com/join/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ3b3Jrc3BhY2VJZCI6IlQ4VGZpZ0FqQkdOMWIzT1pITjNNMUJ3dDNoazIiLCJyb2xlIjoib3duZXIiLCJpbnZpdGVyIjoiaGFpa2U4MjZAZ21haWwuY29tIiwiaWF0IjoxNzUzNjc5NTUzfQ.ksRN2pjtnuXkUIybOxv0PoRmLFUzQssGo_Zjj3tStE0}{Roboflow平台})
+    \item 构建鲁棒坐标解算流程：
+    \begin{itemize}
+        \item 基于相机针孔模型反投影
+        \item 使用message\_filters进行时空同步
+    \end{itemize}
+\end{itemize}
+
+\subsection{路径规划与目标追踪控制}
+针对不同类型目标设计差异化策略：
+\begin{itemize}
+    \item \textbf{静态目标（危重人员）:}
+    \begin{itemize}
+        \item 基于位置的视觉伺服控制
+        \item 高频视觉反馈循环修正水平误差
+        \item "对准-下降"复合式降落
+    \end{itemize}
+    \item \textbf{动态目标（健康人员）:}
+    \begin{itemize}
+        \item "在线建模-预测-拦截"智能决策
+        \item 轨迹数据采集与最小二乘拟合
+        \item 运动模型预测最佳拦截点
+    \end{itemize}
+\end{itemize}
+
+\subsection{高效的任务开发与自动化验证流程}
+\begin{itemize}
+    \item \texttt{launch.sh}脚本实现：
+    \begin{itemize}
+        \item Gazebo仿真环境一键部署
+        \item PX4飞控与所有节点自动启动
+    \end{itemize}
+    \item \texttt{score\_check.py}自动化评分：
+    \begin{itemize}
+        \item 订阅关键ROS话题
+        \item 与Gazebo真值比对
+        \item 量化评估任务执行效果
+    \end{itemize}
+\end{itemize}
+
+% 10. 运行须知
+\section{运行须知}
+\subsection{启动方式}
+\begin{lstlisting}[language=bash]
+# 启动地面站
+cd ~/Downloads  # 地面站安装位置
+./QGroundControl.AppImage
+
+# 激活启动脚本
+cd ~/catkin_ws/src/offboard_run/scripts
+./launch.sh
+\end{lstlisting}
+详细问题参考\textbf{使用说明.pdf}
+
+\subsection{依赖项}
+\begin{itemize}
+    \item OpenCV (建议4.10.0): 
+    \begin{lstlisting}[language=bash]
+    sudo apt-get install python3-opencv
+    \end{lstlisting}
+    \item YOLOv8 (ultralytics包):
+    \begin{lstlisting}[language=bash]
+    pip install ultralytics
+    \end{lstlisting}
+    \item cv\_bridge:
+    \begin{lstlisting}[language=bash]
+    sudo apt-get install ros-<distro>-cv-bridge
+    \end{lstlisting}
+    \item gazebo\_msgs:
+    \begin{lstlisting}[language=bash]
+    sudo apt-get install ros-<distro>-gazebo-msgs
+    \end{lstlisting}
+\end{itemize}
+
+\end{document}
