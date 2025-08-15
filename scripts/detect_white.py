@@ -64,15 +64,8 @@ class ObjectTrackingHoverNode:
         
         self.motion_data_points = []        # 用于存储目标运动轨迹点 (timestamp, x, y)
         self.motion_model = None            # 存储计算出的运动模型
-        self.modeling_min_points = 40       # 开始建模所需的最少数据点
+        self.modeling_min_points = 20       # 开始建模所需的最少数据点
         self.intercept_point = None         # 存储计算出的拦截点
-        
-        self.descend_speed_ms = -0.4        # 下降速度 (m/s)
-        self.final_altitude_m = 0.7         # 最终触发任务完成的高度 (m)
-        self.sync_altitude_m = 10.0         # 开始同步下降的高度
-        self.landing_commit_alt = 1.5       # 切换到最终降落阶段的高度
-        self.prediction_time_s = 0.2        # 预测未来多少秒的位置，用于补偿延迟
-        self.final_align_tolerance_px = 50 # 中心对准的像素容忍度
 
         # Camera parameters (will be updated from CameraInfo)
         self.camera_center_x = None
@@ -102,8 +95,7 @@ class ObjectTrackingHoverNode:
         
         # 状态订阅 - 使用标准MAVROS话题
         rospy.Subscriber(f'/{vehicle_id}/mavros/state', State, self._state_cb)
-        rospy.Subscriber(f'/{vehicle_id}/mavros/local_position/pose', PoseStamped, self._pose_cb)
-        rospy.Subscriber(f'/{vehicle_id}/mavros/vision_pose/pose', PoseStamped, self._position_cb)
+        rospy.Subscriber(f'/{vehicle_id}/mavros/vision_pose/pose', PoseStamped, self._pose_cb)
         
         # 图像和相机信息订阅 - 修改为标准Gazebo相机话题
         self.image_sub = Subscriber(f'/{vehicle_id}/camera/image_raw', Image)
@@ -182,9 +174,6 @@ class ObjectTrackingHoverNode:
             
     def _target_pose_cb(self, msg):
         self.healthy_pose = msg
-        
-    def _position_cb(self, msg):
-        self.current_pos = msg.pose
 
     def synchronized_callback(self, image_msg, camera_info_msg, pose_msg):
         """同步回调函数"""
@@ -314,7 +303,7 @@ class ObjectTrackingHoverNode:
             # ------------------ 状态机逻辑 ------------------
             self._ensure_offboard_mode()
             current_altitude = self.drone_pose.pose.position.z
-            vel = 1.0
+            vel = 0.5
             
             # 阶段 1：搜索
             if self.landing_state == "SEARCHING":
@@ -374,7 +363,7 @@ class ObjectTrackingHoverNode:
                     center = self.motion_model['center']
                     radius = self.motion_model['radius']
                     
-                    self.intercept_point = np.array([center[0], center[1] + radius])
+                    self.intercept_point = np.array([center[0] + 3.0, center[1]])
                     #drone_pos_xy = np.array([self.drone_pose.pose.position.x, self.drone_pose.pose.position.y])
                     
                     #vec_to_drone = drone_pos_xy - center
@@ -399,12 +388,12 @@ class ObjectTrackingHoverNode:
                     
             # 阶段 4: 下降至等待高度
             elif self.landing_state == "DESCENDING_TO_WAIT":
-                rospy.loginfo_throttle(1, f"State: DESCENDING_TO_WAIT - Descending to {self.final_altitude_m}m. Current: {current_altitude:.2f}m")
+                rospy.loginfo_throttle(1, f"State: DESCENDING_TO_WAIT - Descending to 0.7m. Current: {current_altitude:.2f}m")
                 # 保持水平位置不动
-                self._publish_velocity_command(vx=0.0, vy=0.0, vz=-1.0)
+                self._publish_velocity_command(vx=0.0, vy=0.0, vz=-0.5)
 
                 # 检查是否到达
-                if current_altitude <= self.final_altitude_m:
+                if current_altitude <= 0.7:
                     rospy.loginfo(f"Reached waiting altitude. Switching to WAITING_FOR_TARGET.")
                     self.landing_state = "WAITING_FOR_TARGET"
                     self.hover()
@@ -415,98 +404,12 @@ class ObjectTrackingHoverNode:
                 self.hover()
                 if self.target is not None:
                     pose_msg = Pose()
-                    pose_msg.position.x = self.intercept_point[0] + 1
-                    pose_msg.position.y = self.intercept_point[1]
+                    pose_msg.position.x = self.intercept_point[0]
+                    pose_msg.position.y = self.intercept_point[1] + 1.0
                     pose_msg.position.z = 0.0
                     self.pose_publishers['white'].publish(pose_msg)
                     rospy.loginfo(f"SUCCESS: Target ['white'] pose ({self.intercept_point[0], self.intercept_point[1]})published.")
                     self.target_pose_published = True # 触发主线程退出
-                    '''
-                    error_x_px = self.target['u_pixel'] - self.camera_center_x
-                    error_y_px = self.target['v_pixel'] - self.camera_center_y
-                    if (abs(error_x_px) < self.final_align_tolerance_px and 
-                        abs(error_y_px) < self.final_align_tolerance_px):
-                            pose_msg = Pose()
-                            pose_msg.position.x = self.intercept_point[0]
-                            pose_msg.position.y = self.intercept_point[1]
-                            pose_msg.position.z = 0.0
-                            self.pose_publishers['white'].publish(pose_msg)
-                            rospy.loginfo(f"SUCCESS: Target ['white'] pose ({self.intercept_point[0], self.intercept_point[1]})published.")
-                            self.target_pose_published = True # 触发主线程退出
-                    else:
-                        radius_direction_vec = self.intercept_point - self.motion_model['center']
-                        radius_direction_unit_vec = radius_direction_vec / np.linalg.norm(radius_direction_vec)
-                        target = self.intercept_point + radius_direction_unit_vec * self.motion_model['radius']
-                        
-                        dx = target[0] - self.drone_pose.pose.position.x
-                        dy = target[1] - self.drone_pose.pose.position.y
-                        dist = math.sqrt(dx**2 + dy**2)
-                        
-                        rospy.loginfo_throttle(1, f"State: ADJUSTING - Moving to final observation point, distance: {dist:.2f}m")
-                        vel_x = (dx / dist) * 0.1
-                        vel_y = (dy / dist) * 0.1
-                        f_vel = vel_x * math.cos(self.current_yaw) + vel_y * math.sin(self.current_yaw)
-                        l_vel = -vel_x * math.sin(self.current_yaw) + vel_y * math.cos(self.current_yaw)
-                        self._publish_velocity_command(f_vel, l_vel, 0.0)
-                        rospy.logwarn("Finalizing but target is lost. Cannot publish.")'''
-                    
-                
-                '''
-                rospy.loginfo(f"{target[0]}, {target[1]}, {self.intercept_point[0]}, {self.intercept_point[1]}")
-                if dist > 0.1:
-                    rospy.loginfo_throttle(1, f"State: ADJUSTING - Moving to final observation point, distance: {dist:.2f}m")
-                    vel_x = (dx / dist) * 0.1
-                    vel_y = (dy / dist) * 0.1
-                    f_vel = vel_x * math.cos(self.current_yaw) + vel_y * math.sin(self.current_yaw)
-                    l_vel = -vel_x * math.sin(self.current_yaw) + vel_y * math.cos(self.current_yaw)
-                    self._publish_velocity_command(f_vel, l_vel, 0.0)
-                else:
-                    rospy.loginfo("Reached final observation point. Switching to OBSERVING.")
-                    self.hover()
-                    if self.target is not None:
-                        pose_msg = Pose()
-                        pose_msg.position.x = self.current_pos.position.x
-                        pose_msg.position.y = self.current_pos.position.y
-                        pose_msg.position.z = 0.0
-                        self.pose_publishers['white'].publish(pose_msg)
-                        rospy.loginfo(f"SUCCESS: Target ['white'] pose ({self.intercept_point[0], self.intercept_point[1]})published.")
-                        self.target_pose_published = True'''
-                
-                '''# 检查目标是否在摄像头中心
-                if self.target is not None:
-                    error_x_px = self.target['u_pixel'] - self.camera_center_x
-                    error_y_px = self.target['v_pixel'] - self.camera_center_y
-                    if (abs(error_x_px) < self.final_align_tolerance_px and 
-                        abs(error_y_px) < self.final_align_tolerance_px):
-                        
-                        rospy.loginfo("Target is in camera center! Publishing the position.")
-                        self.landing_state = "FINALIZING"
-                        pose_msg = Pose()
-                        pose_msg.position.x = self.current_pos.position.x
-                        pose_msg.position.y = self.current_pos.position.y
-                        pose_msg.position.z = 0.0
-                        self.pose_publishers['white'].publish(pose_msg)
-                        rospy.loginfo(f"SUCCESS: Target ['white'] pose ({self.intercept_point[0], self.intercept_point[1]})published.")
-                        self.target_pose_published = True
-                    '''
-            # 阶段 6: 任务完成
-            '''elif self.landing_state == "FINALIZING":
-                rospy.loginfo("State: FINALIZING - Publishing success topic.")
-                
-                
-                
-                # 发布任务完成话题
-                if self.target is not None:
-                    pose_msg = Pose()
-                    pose_msg.position.x = self.current_pos.position.x
-                    pose_msg.position.y = self.current_pos.position.y
-                    pose_msg.position.z = 0.0
-                    self.pose_publishers['white'].publish(pose_msg)
-                    rospy.loginfo(f"SUCCESS: Target ['white'] pose ({self.intercept_point[0], self.intercept_point[1]})published.")
-                    self.target_pose_published = True # 触发主线程退出
-                else:
-                    rospy.logwarn("Finalizing but target is lost or not white. Cannot publish.")
-            '''
             self.control_rate.sleep()
     
     def _ensure_offboard_mode(self):
@@ -676,7 +579,7 @@ class ObjectTrackingHoverNode:
         omega = np.mean(angular_velocities)
         
         # 半径必须在合理范围内
-        if not (2.93 < radius < 3.07) or not (1493.07 < cx < 1494.47):
+        if not (2.9 < radius < 3.1) or not (1493.07 < cx < 1494.47):
             rospy.logwarn(f"Calculated radius {radius:.2f}m is out of expected range. Retrying.")
             rospy.logwarn(f"Calculated center_x {cx:.2f}m is out of expected range. Retrying.")
             self.motion_data_points = [] # 清空数据重新收集

@@ -19,6 +19,8 @@ catkin build
 
 
 
+### QGC中速度相关的参数
+
 ```
 # 四旋翼
 MPC_XY_CRUISE 巡航速度
@@ -68,19 +70,19 @@ cd ~/catkin_ws/src/offboard_run/scripts
 python3 vtol_commander.py
 
 # 阶段一识别待救援人员坐标脚本
-source ~/catkin_ws/devel/setup.bash
-rosrun offboard_run detect_stage1.py
+cd ~/catkin_ws/src/offboard_run/scripts
+python3 detect_stage1.py
 
 # 阶段二四旋翼无人机控制
 cd ~/catkin_ws/src/offboard_run/scripts
 python3 iris_commander.py
 
 # 阶段二识别重伤人员和健康人员详细坐标脚本
-source ~/catkin_ws/devel/setup.bash
-rosrun offboard_run detect_red.py
+cd ~/catkin_ws/src/offboard_run/scripts
+python3 detect_white.py
 
-source ~/catkin_ws/devel/setup.bash
-rosrun offboard_run detect_white.py
+cd ~/catkin_ws/src/offboard_run/scripts
+python3 detect_red.py
 
 ```
 
