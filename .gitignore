@@ -1,3 +1,9 @@
 *.log
 *test*
 script/__pycache__
+
+*.aux
+*.fdb_latexmk
+*.fls
+*.xdv
+*.gz

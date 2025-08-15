@@ -1,0 +1,189 @@
+\documentclass[12pt]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{geometry}
+\geometry{a4paper, margin=2cm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fontspec}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\setmainfont{Times New Roman}
+\setmonofont{Consolas}
+
+% 设置超链接样式
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    pdftitle={项目总结报告},
+}
+
+% 标题格式设置
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\bfseries}{\thesubsubsection}{1em}{}
+
+% 代码块样式
+\lstset{
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    backgroundcolor=\color{white},
+    tabsize=4
+}
+
+\begin{document}
+
+% 标题页
+\begin{center}
+    \vspace*{1cm}
+    {\Huge 项目总结报告}
+    
+    \vspace{1.5cm}
+    {\LARGE 选题名称}
+    
+    \vspace{0.5cm}
+    {\Large SH-10 无人机双机协同自主搜救任务}
+    
+    \vspace{1.5cm}
+    {\LARGE 作品名称}
+    
+    \vspace{0.5cm}
+    {\Large 面向自主搜救任务的双机系统智能决策算法研究}
+\end{center}
+
+\newpage
+
+% 项目概述
+\section{项目概述}
+本项目旨在开发一套运用智能算法实现自主任务执行的虚拟无人机系统。系统通过集成 GPS、计算机视觉等技术，使无人机具备在复杂环境中进行高低空目标识别与追踪功能。任务流程分为两个阶段：
+
+\begin{itemize}
+    \item \textbf{第一阶段：} 由垂起固定翼无人机 A 执行侦察任务，负责在指定区域内完成模式切换、避障及目标识别定位，并向四旋翼无人机 B 发送三名模拟人员的精确坐标；
+    \item \textbf{第二阶段：} 由四旋翼无人机 B 执行精准救援任务，在无人机 A 降落后起飞，对指定目标进行路径规划与精准追踪，最终在特定高度发布精确的降落平台坐标。
+\end{itemize}
+
+% 项目结构
+\section{项目结构}
+项目采用 ROS1（机器人操作系统）作为核心开发框架，结构设计清晰合理，文件结构组织合理，便于模块化开发与维护。\texttt{src}目录下的 \texttt{offboard\_run}功能包包含核心节点：
+
+\begin{itemize}
+    \item \texttt{vtol\_commander.py}和 \texttt{detect\_stage1.py}：负责第一阶段任务逻辑
+    \item \texttt{iris\_commander.py}、\texttt{detect\_red.py}和 \texttt{detect\_white.py}：负责第二阶段的精确定位与追踪逻辑
+\end{itemize}
+
+% 开发过程
+\section{开发过程}
+\textbf{仅作介绍，详见 \texttt{项目设计报告.pdf}}
+
+\subsection{阶段一}
+在第一阶段，我们实现了无人机 A 的基础飞行控制功能，包括路径规划与避障。通过 \texttt{vtol\_commander.py}，无人机 A 能够：
+\begin{itemize}
+    \item 接收目标区域位置信息
+    \item 规划避障路径
+    \item 在接近目标点时发布到达信号
+    \item 激活目标识别模块 \texttt{detect\_stage1.py}，对遥感数据进行实时处理
+    \item 计算并发布目标物的精确坐标
+\end{itemize}
+
+\subsection{阶段二}
+在第二阶段，\texttt{iris\_commander.py}依据第一阶段提供的目标坐标：
+\begin{itemize}
+    \item 控制无人机 B 飞抵目标上空进行递进式侦查
+    \item \texttt{detect\_red.py}与 \texttt{detect\_white.py}分别执行对红色危重目标与白色健康目标的抵近识别任务
+\end{itemize}
+
+% 项目分工
+\section{项目分工}
+项目分工明确，成员各司其职负责特定模块的开发，使用git进行代码协作，有效确保了开发效率与代码质量。合理的任务分配与高效的工具应用，保障了项目快速推进、及时同步，以及各模块的独立性与系统集成的顺畅性。
+
+代码仓库：\url{https://github.com/janeyujie/Zhihang2025-offboard_run}
+
+% 技术亮点
+\section{技术亮点}
+\subsection{异构双机协同任务规划与GNC一体化设计}
+本项目构建了一套高效的\textbf{异构无人机（VTOL与四旋翼）}协同架构：
+\begin{itemize}
+    \item 设计清晰的任务分配与信息流交接机制
+    \item VTOL执行广域侦察与目标初步定位
+    \item 四旋翼执行高精度抵近与末端作业
+\end{itemize}
+
+在控制层面，实现了\textbf{任务规划与GNC（制导、导航与控制）系统}的一体化设计：
+\begin{itemize}
+    \item \texttt{vtol\_commander/iris\_commander}脚本中的状态机作为任务规划层
+    \item 通过MAVROS接口转化为对PX4飞控的位置或速度级指令
+    \item 形成完整的自主控制闭环
+    \item 融入禁飞区规避策略确保飞行安全
+\end{itemize}
+
+\subsection{基于深度学习的多模态视觉感知与精确定位}
+在 \texttt{detect\_stage1.py}、\texttt{detect\_red.py}和 \texttt{detect\_white.py}中：
+\begin{itemize}
+    \item 集成\textbf{YOLOv8深度学习模型}作为核心视觉感知算法
+    \item 通过在自定义数据集上进行微调训练
+    \item 实现搜救场景下多类别（危重、轻伤、健康）目标的\textbf{高精度实时检测与分类}
+\end{itemize}
+
+训练数据详情请见：\url{https://app.roboflow.com/join/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ3b3Jrc3BhY2VJZCI6IlQ4VGZpZ0FqQkdOMWIzT1pITjNNMUJ3dDNoazIiLCJyb2xlIjoib3duZXIiLCJpbnZpdGVyIjoiaGFpa2U4MjZAZ21haWwuY29tIiwiaWF0IjoxNzUzNjc5NTUzfQ.ksRN2pjtnuXkUIybOxv0PoRmLFUzQssGo_Zjj3tStE0}
+
+在目标定位方面：
+\begin{itemize}
+    \item 基于\textbf{相机针孔模型}反投影坐标
+    \item 使用\texttt{message\_filters}进行\textbf{图像帧、相机信息和无人机位姿的严格时空同步}
+    \item 确保坐标解算数据的高保真度
+\end{itemize}
+
+\subsection{动/静态目标的末端视觉伺服与轨迹预测}
+针对不同类型目标设计差异化策略：
+
+\begin{itemize}
+    \item \textbf{静态目标（危重人员）}：
+    \begin{itemize}
+        \item 采用\textbf{基于位置的视觉伺服控制方案}
+        \item 通过高频视觉反馈循环修正水平误差
+        \item 实现"对准-下降"复合式精准降落
+    \end{itemize}
+    
+    \item \textbf{动态目标（健康人员）}：
+    \begin{itemize}
+        \item 设计"在线建模-预测-拦截"智能决策算法
+        \item 轨迹数据采集与最小二乘法拟合
+        \item 预测目标未来穿越位置
+        \item 前出至最佳拦截点等待
+    \end{itemize}
+\end{itemize}
+
+\subsection{高效的任务开发与自动化验证流程}
+\begin{itemize}
+    \item \texttt{launch.sh}脚本实现：
+    \begin{itemize}
+        \item Gazebo仿真环境一键部署
+        \item PX4飞控与所有节点自动启动
+    \end{itemize}
+    
+    \item \texttt{score\_check.py}自动化评分：
+    \begin{itemize}
+        \item 订阅关键ROS话题
+        \item 与Gazebo真值比对
+        \item 量化评估任务执行效果
+    \end{itemize}
+\end{itemize}
+
+% 总结
+\section{总结}
+本项目成功实现了无人机高低空协同目标识别与追踪系统：
+\begin{itemize}
+    \item 可靠完成自动导航、高空目标识别定位及低空目标精确追踪
+    \item 模块划分清晰合理，技术方案具备先进性
+    \item 未来工作重点：优化代码架构，提升系统稳定性、可靠性与执行效率
+    \item 适应更复杂的实际应用场景需求
+\end{itemize}
+
+\end{document}

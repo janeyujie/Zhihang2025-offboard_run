@@ -1,0 +1,80 @@
+\documentclass[12pt]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{geometry}
+\geometry{a4paper, margin=2cm}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+
+% 代码块样式设置
+\definecolor{codebg}{rgb}{0.95,0.95,0.95}
+\lstset{
+    basicstyle=\small\ttfamily,
+    backgroundcolor=\color{codebg},
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    showstringspaces=false,
+    tabsize=4,
+    xleftmargin=20pt
+}
+
+% 设置列表间距
+\setlist{noitemsep, topsep=5pt}
+
+\begin{document}
+
+\section{依赖项}
+首先在实验基础环境上确保已安装以下依赖项：
+
+\subsection{YOLOv8}
+您需要安装 \texttt{ultralytics} 包来使用 YOLOv8 模型：
+\begin{lstlisting}[language=bash]
+pip install ultralytics
+\end{lstlisting}
+
+\subsection{cv\_bridge}
+请确保已安装 \texttt{cv\_bridge} 以便将 ROS 图像消息转换为 OpenCV 格式：
+\begin{lstlisting}[language=bash]
+sudo apt-get install ros-noetic-cv-bridge
+\end{lstlisting}
+
+\section{启动方式}
+\subsection{地面站}
+请将 \texttt{QGroundControl.AppImage} 文件放至 \texttt{\textasciitilde/Downloads} 文件夹下，如果在其他文件夹下可以修改脚本相应启动命令。
+
+\subsection{catkin\_ws}
+请将我们提供的 \texttt{offboard\_run} 解压到 \texttt{\textasciitilde/catkin\_ws/src} 文件夹下
+
+\subsection{启动}
+要启动该项目，请运行与当前文件同级目录下的 \texttt{launch.sh} 脚本，该脚本将启动所有必要的节点和服务，确保无人机能够正确执行路径点导航和目标识别任务。
+\begin{lstlisting}[language=bash]
+# 使用前需要
+cd ~/catkin_ws
+catkin clean
+catkin build
+# 启动地面站
+cd ~/Downloads # 你安装的地面站位置
+./QGroundControl.AppImage
+# 激活启动脚本
+cd ~/catkin_ws/src/offboard_run/scripts
+./launch.sh
+\end{lstlisting}
+
+\subsection{特殊情况}
+如果 gazebo 中无人机不见，可以执行以下命令：
+\begin{lstlisting}[language=bash]
+killall gzserver
+killall gzclient
+\end{lstlisting}
+
+如果提示没有 \texttt{offboard\_run} 包，可以重新启动电脑或虚拟机。
+
+\subsection{测试建议}
+如果允许，可以测试多次，保证结果符合要求。
+
+\subsection{手动启动}
+如果用一键启动脚本在启动过程中出错，可根据题目要求依次手动启动脚本运行。
+
+\end{document}
