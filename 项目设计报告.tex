@@ -373,11 +373,11 @@
 
 % 9. 创新点
 \section{创新点}
-\subsection{异构双机协同任务规划与GNC一体化设计}
+\subsection{异构双机协同任务规划与状态决策一体化设计}
 \begin{itemize}
     \item 构建VTOL与四旋翼高效协同架构
     \item 设计任务分配与信息流交接机制
-    \item 实现任务规划与GNC系统一体化设计
+    \item 实现任务规划与追踪系统一体化设计
     \begin{itemize}
         \item 状态机负责顶层任务决策
         \item 通过MAVROS接口转化为PX4飞控指令
@@ -392,25 +392,16 @@
     \item 构建鲁棒坐标解算流程：
     \begin{itemize}
         \item 基于相机针孔模型反投影
-        \item 使用message\_filters进行时空同步
+        \item 使用消息队列进行时空同步
     \end{itemize}
 \end{itemize}
 
-\subsection{路径规划与目标追踪控制}
-针对不同类型目标设计差异化策略：
+\subsection{实现任务规划与导航控制系统}
 \begin{itemize}
-    \item \textbf{静态目标（危重人员）:}
-    \begin{itemize}
-        \item 基于位置的视觉伺服控制
-        \item 高频视觉反馈循环修正水平误差
-        \item "对准-下降"复合式降落
-    \end{itemize}
-    \item \textbf{动态目标（健康人员）:}
-    \begin{itemize}
-        \item "在线建模-预测-拦截"智能决策
-        \item 轨迹数据采集与最小二乘拟合
-        \item 运动模型预测最佳拦截点
-    \end{itemize}
+    \item 状态机负责顶层任务决策
+    \item 将无人机起飞、解锁、悬停、移动等基本操作封装
+    \item 对于固定翼发布坐标话题控制，实现目标的快速接近
+    \item 对于四旋翼发布速度话题实现精确飞行控制
 \end{itemize}
 
 \subsection{高效的任务开发与自动化验证流程}
