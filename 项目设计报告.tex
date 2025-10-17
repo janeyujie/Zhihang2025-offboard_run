@@ -6,6 +6,7 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{hyperref}
+\usepackage{caption}
 \usepackage{titlesec}
 \usepackage{booktabs}
 \usepackage{longtable}
@@ -142,7 +143,7 @@
     \item 抵达目标区域后，激活\textbf{末端视觉引导系统}：
     \begin{itemize}
         \item \textbf{健康人员：} 进入目标状态估计阶段，通过连续视觉检测采样拟合运动轨迹，建立运动模型，计算最优拦截点并前出至该点上空，下降至0.7米高度等待目标进入指定区域后发布平台坐标
-        \item \textbf{重伤人员：} 激活视觉伺服控制逻辑，采用"对准-下降"递进策略，通过闭环控制修正水平位置，确保精确位于目标正上方，逐步下降至0.5米高度发布坐标
+        \item \textbf{重伤人员：} 激活视觉伺服控制逻辑，采用"对准-下降"抵进策略，通过闭环控制修正水平位置，确保精确位于目标正上方，逐步下降至0.5米高度发布坐标
     \end{itemize}
 \end{itemize}
 
@@ -235,17 +236,20 @@
 % 7. 文件说明
 \section{文件说明}
 \subsection{vtol\_commander.py（阶段一）}
-用于固定翼无人机的导航控制，实现：
+用于固定翼无人机的导航控制，结合人工势场法（Artificial Potential Field, APF）实现自主路径规划，具体功能包括：
 \begin{itemize}
-    \item 根据GPS坐标点绕过禁飞区到达目标区域
+    \item 根据GPS坐标点，利用人工势场法生成避障路径，绕过禁飞区并安全抵达目标区域
     \item 激活第一阶段的视觉识别进程
-    \item 目标搜索
+    \item 在目标区域开展初步目标搜索
 \end{itemize}
 
 \subsubsection{整体路线预览}
-\begin{center}
-    \includegraphics[width=0.8\textwidth]{./resources/3.png}
-\end{center}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{./resources/路径规划.jpg}
+    \caption{示例路径规划效果图}
+    \label{fig:path_planning}
+\end{figure}
 
 \subsubsection{起飞降落逻辑}
 \begin{itemize}
@@ -253,69 +257,197 @@
     \item 切换为固定翼模式执行任务
     \item 返回旋翼模式区切换回多旋翼模式并降落锁桨
 \end{itemize}
-\begin{center}
-    \includegraphics[width=0.6\textwidth]{./resources/4.png}
-    \includegraphics[width=0.6\textwidth]{./resources/5.png}
-\end{center}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.45\textwidth]{./resources/4.png}
+    \includegraphics[width=0.4\textwidth]{./resources/5.png}
+    \caption{起飞与降落示意图}
+    \label{fig:takeoff_landing}
+\end{figure}
 
-\subsubsection{避障策略}
+\subsubsection{人工势场法原理与实现步骤}
+人工势场法（APF）是一种受物理场启发的局部路径规划方法，由Khatib于1986年提出。其核心思想是将任务环境建模为一个虚拟势场：
 \begin{itemize}
-    \item 保持安全距离绕开禁飞区
-    \item 设置较高飞行速度避免碰撞
-\end{itemize}
-\begin{center}
-    \includegraphics[width=0.6\textwidth]{./resources/1.png}
-\end{center}
-
-\subsection{detect\_stage1.py（阶段二）}
-实现利用vtol无人机遥感数据进行目标识别定位：
-\begin{itemize}
-    \item 数据读取：使用消息队列保存同一时刻的图像和位置信息
-    \item 识别功能：基于YOLOv8模型实时检测和分类目标
-    \item 坐标计算：基于遥感坐标转换模型计算物体具体坐标
-    \item 数据处理：静止目标使用均值滤波，运动目标选择靠近图像中心的坐标
+    \item \textbf{目标点}产生\textbf{引力场}，引导无人机向目标移动；
+    \item \textbf{禁飞区}（视为障碍物）产生\textbf{斥力场}，迫使无人机远离危险区域；
+    \item 无人机在\textbf{引力与斥力的合力方向}上运动，实现避障与趋近目标的统一。
 \end{itemize}
 
-\textbf{视觉识别模型：}
+设无人机当前位置为 $\mathbf{p} = (x, y)$，目标点为 $\mathbf{p}_g$，第 $i$ 个禁飞区中心为 $\mathbf{p}_{o_i}$，则：
+
 \begin{enumerate}
-    \item 采集飞行遥感数据：
-    
-    利用 save.py 脚本对遥感数据进行采集
-    
-    \item 标注遥感数据：
-    
-    利用 \href{https://app.roboflow.com/join/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ3b3Jrc3BhY2VJZCI6IlQ4VGZpZ0FqQkdOMWIzT1pITjNNMUJ3dDNoazIiLCJyb2xlIjoib3duZXIiLCJpbnZpdGVyIjoiaGFpa2U4MjZAZ21haWwuY29tIiwiaWF0IjoxNzUzNjc5NTUzfQ.ksRN2pjtnuXkUIybOxv0PoRmLFUzQssGo_Zjj3tStE0}{Roboflow平台} 进行数据标注
-    
-    \item 对基础模型进行再训练：
-    \item 利用训练好的模型：
-    
-    详情见于源码
-    
+    \item \textbf{引力计算}（通常采用线性模型）：
+    \[
+    \mathbf{F}_{\text{att}} = k_{\text{att}} (\mathbf{p}_g - \mathbf{p})
+    \]
+    其中 $k_{\text{att}} > 0$ 为引力增益系数，控制趋向目标的强度。
+
+    \item \textbf{斥力计算}（仅在障碍物影响半径 $d_0$ 内生效）：
+    \[
+    \mathbf{F}_{\text{rep},i} =
+    \begin{cases}
+        k_{\text{rep}} \left( \frac{1}{\|\mathbf{p} - \mathbf{p}_{o_i}\|} - \frac{1}{d_0} \right) \frac{1}{\|\mathbf{p} - \mathbf{p}_{o_i}\|^2} \cdot \frac{\mathbf{p} - \mathbf{p}_{o_i}}{\|\mathbf{p} - \mathbf{p}_{o_i}\|}, & \|\mathbf{p} - \mathbf{p}_{o_i}\| \leq d_0 \\
+        \mathbf{0}, & \text{otherwise}
+    \end{cases}
+    \]
+    其中 $k_{\text{rep}} > 0$ 为斥力增益，$d_0$ 为斥力作用半径（通常略大于禁飞区半径）。
+
+    \item \textbf{合力合成}：
+    \[
+    \mathbf{F}_{\text{total}} = \mathbf{F}_{\text{att}} + \sum_{i=1}^{N} \mathbf{F}_{\text{rep},i}
+    \]
+
+    \item \textbf{航向生成}：将合力方向转换为期望航向角：
+    \[
+    \theta_{\text{des}} = \operatorname{atan2}(F_y, F_x)
+    \]
+    并通过飞控系统（如PX4）发送航向或速度指令，驱动无人机沿势场下降方向运动。
+
+    \item \textbf{阶段切换判断}：当 $\|\mathbf{p} - \mathbf{p}_g\| < r_{\text{vision}}$ 且斥力总和接近零时，判定已进入目标区域，停止APF导航，启动视觉识别进程。
 \end{enumerate}
 
-\textbf{遥感坐标转换模型：}
+该方法计算高效、响应迅速，适用于禁飞区分布稀疏的中程导航场景。尽管存在局部极小值等理论缺陷，在本系统中通过合理设置势场参数与任务边界条件，可有效规避此类问题。
+
+\subsubsection{避障策略}
+基于上述人工势场法，系统实施以下避障策略：
+\begin{itemize}
+    \item 将每个禁飞区建模为圆形斥力源，确保无人机在其影响半径外保持安全距离；
+    \item 通过调节 $k_{\text{att}}$ 与 $k_{\text{rep}}$ 的比例，在保证避障安全的前提下维持较高的巡航速度；
+    \item 实时更新势场并重规划航向，适应动态环境变化（如新增临时禁飞区）；
+    \item 当合力方向与当前飞行方向夹角过大时，引入平滑滤波或最大转弯率约束，满足固定翼无人机的动力学限制。
+\end{itemize}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{./resources/1.png}
+    \caption{整体飞行轨迹}
+    \label{fig:flight_trajectory}
+\end{figure}
+
+\subsection{detect\_stage1.py（阶段二）：基于视觉的目标识别与地理定位}
+
+本模块实现利用 VTOL 无人机搭载的遥感系统，对地面目标进行实时检测、分类与高精度地理坐标定位。系统通过融合机载视觉感知与高精度位姿信息，完成从像素到世界坐标的端到端映射，为后续任务提供可靠的目标位置输入。
+
+\begin{itemize}
+    \item \textbf{数据同步}：通过数据封装对齐同一时刻的 RGB 图像与无人机位姿（GPS + IMU），同时通过消息队列对遥感数据进行缓冲，减轻数据处理流水线中的阻塞；
+    \item \textbf{目标识别}：采用轻量化 YOLOv8 模型实现实时目标检测与多类别分类；
+    \item \textbf{坐标解算}：基于针孔相机模型与刚体变换，将检测框中心像素映射至地理坐标系；
+    \item \textbf{数据滤波}：对静止目标采用滑动窗口均值滤波以抑制定位抖动；对运动目标优先选取靠近图像中心（畸变最小区域）的观测结果，提升精度。
+\end{itemize}
+
+\subsubsection{视觉识别模型构建流程}
+
 \begin{enumerate}
-    \item 像素坐标转相机方向向量：
+    \item \textbf{遥感数据采集}：  
+    利用 \texttt{save.py} 脚本在真实飞行任务中同步录制图像流与位姿数据，确保训练数据与部署场景一致。
+
+    \item \textbf{数据标注}：  
+    通过 \href{https://app.roboflow.com/join/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ3b3Jrc3BhY2VJZCI6IlQ4VGZpZ0FqQkdOMWIzT1pITjNNMUJ3dDNoazIiLCJyb2xlIjoib3duZXIiLCJpbnZpdGVyIjoiaGFpa2U4MjZAZ21haWwuY29tIiwiaWF0IjoxNzUzNjc5NTUzfQ.ksRN2pjtnuXkUIybOxv0PoRmLFUzQssGo_Zjj3tStE0}{Roboflow 平台} 对图像进行高质量边界框标注，并自动完成数据增强、格式转换与版本管理。
+
+    \item \textbf{模型微调}：  
+    在 YOLOv8n（nano）预训练模型基础上，使用标注数据进行领域自适应微调，显著提升对目标人员的识别准确率与鲁棒性。
+
+    \item \textbf{部署推理}：  
+    将训练好的模型集成至 \texttt{detect\_stage1.py}，在模拟器中实现实时推理。
+\end{enumerate}
+
+\noindent
+\textbf{模型训练效果可视化：}
+\begin{figure}[htbp]
+    \centering
+% 第一行：三张图
+\begin{minipage}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{./resources/roboflow-tab3.png}
+\end{minipage}
+\hfill
+\begin{minipage}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{./resources/roboflow-tab7.png}
+\end{minipage}
+\hfill
+\begin{minipage}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{./resources/roboflow-tab1.png}
+\end{minipage}
+
+\vspace{1em} % 行间距
+
+% 第二行：两张图，居中对齐
+\begin{minipage}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{./resources/roboflow-tab5.png}
+\end{minipage}
+\begin{minipage}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{./resources/roboflow-tab6.png}
+\end{minipage}
+
+\caption{模型训练过程}
+\label{fig:model_training}
+\end{figure}
+
+
+\subsubsection{遥感坐标转换模型}
+
+系统采用经典的针孔相机成像模型，结合无人机位姿信息，将像素坐标逐步转换为地理坐标。转换流程如下：
+
+\begin{enumerate}
+    \item \textbf{像素坐标 $\rightarrow$ 相机归一化方向向量}：  
+    利用相机内参矩阵 $K$ 的逆变换，将像素 $(u, v)$ 转换为相机坐标系下的单位射线方向：
     \[
-    \mathbf{p}_{\rm cam} = K^{-1} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = \begin{bmatrix} (u - c_x) / f_x \\ (v - c_y) / f_y \\ 1 \end{bmatrix}
+    \mathbf{p}_{\rm cam} = K^{-1} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} 
+    = \begin{bmatrix} (u - c_x) / f_x \\ (v - c_y) / f_y \\ 1 \end{bmatrix}
     \]
-    \item 相机坐标系到机体坐标系：
+    其中 $f_x, f_y$ 为焦距（像素单位），$(c_x, c_y)$ 为主点坐标。
+
+    \item \textbf{相机坐标系 $\rightarrow$ 机体坐标系}：  
+    通过外参（旋转 $R_{\rm cam\to body}$ 与平移 $\mathbf{t}_{\rm cam\to body}$）完成坐标变换：
     \[
     \mathbf{p}_{\rm body} = R_{\rm cam\to body}\,\mathbf{p}_{\rm cam} + \mathbf{t}_{\rm cam\to body}
     \]
-    \item 机体坐标系到世界坐标系：
+
+    \item \textbf{机体坐标系 $\rightarrow$ 世界坐标系}：  
+    利用飞控提供的无人机位姿（位置 $\mathbf{p}_{\rm UAV}$ 与姿态 $R_{\rm body\to world}$），将射线方向映射至全局坐标系：
     \[
-    \mathbf{p}_{\rm target} = \mathbf{p}_{\rm UAV} + R_{\rm body\to world}\,\mathbf{p}_{\rm body}
+    \mathbf{ray}_{\rm world} = R_{\rm body\to world}\,\mathbf{p}_{\rm body}
     \]
-    \item 三维坐标计算（射线与地面交点）：
+
+    \item \textbf{射线-地面交点计算}：  
+    假设地面高度为 $z = z_{\rm ground}$，无人机相机中心高度为 $z_{\rm cam}$，则交点参数为：
     \[
-    t = \frac{ground_z - cam_z}{ray_{world}[2]}, \quad P = Cam_{position} + t \cdot ray_{world}
+    t = \frac{z_{\rm ground} - z_{\rm cam}}{\mathbf{ray}_{\rm world}[2]}, \quad 
+    \mathbf{P}_{\rm target} = \mathbf{p}_{\rm UAV} + t \cdot \mathbf{ray}_{\rm world}
+    \label{eq:attractive}
     \]
-    \item 误差修正：
+
+    \item \textbf{系统误差修正}：  
+    考虑IMU/GPS 延迟、仿真计算延迟等因素，引入经验补偿项 $\mathbf{v}_{\rm error}$（在我们的仿真环境中，主要是根据飞机运行状态确定）：
     \[
-    P = P + v_{error}
+    \mathbf{P}_{\rm corrected} = \mathbf{P}_{\rm target} + \mathbf{v}_{\rm error}
     \]
 \end{enumerate}
+
+\noindent
+\textbf{坐标转换几何示意：}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.45\textwidth]{./resources/针孔模型.jpg}
+    \hfill
+    \includegraphics[width=0.45\textwidth]{./resources/坐标1.png}
+\caption{坐标转换示意图}
+\label{fig:coordinate_transformation}
+\end{figure}
+
+\subsubsection{方法优势分析}
+
+相较于传统目标定位方法（如纯 GPS 标记、人工判读或基于特征匹配的 SfM），本方案具有以下显著优势：
+
+\begin{itemize}
+    \item \textbf{高时效性}：YOLOv8 模型在边缘设备上实现实时推理，支持动态目标跟踪；
+    \item \textbf{高精度定位}：融合高精度位姿与几何投影模型，定位误差可控制在 1–3 米内（取决于飞行高度与误差修正）；
+    \item \textbf{强鲁棒性}：通过消息队列和数据封装严格同步图像与位姿，避免因异步导致的坐标漂移；
+    \item \textbf{自动化程度高}：从检测到定位全流程无需人工干预，适用于大规模巡检或应急响应场景。
+\end{itemize}
 
 \subsection{iris\_commander.py（阶段三）}
 用于四旋翼无人机的导航控制：
@@ -326,58 +458,91 @@
 \end{itemize}
 
 \subsubsection{整体路线预览（示例）}
-\begin{center}
-    \includegraphics[width=0.8\textwidth]{./resources/6.png}
-\end{center}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{./resources/6.png}
+    \caption{阶段三整体路径}
+    \label{fig:stage2_path}
+\end{figure}
 
 \subsubsection{控制逻辑}
 通过ROS话题直接控制飞行、悬停和移动
 
 \subsubsection{避障策略}
-\begin{center}
-    \includegraphics[width=0.6\textwidth]{./resources/2.png}
-\end{center}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{./resources/2.png}
+    \caption{四旋翼避障路径示例}
+    \label{fig:quad_obstacle_avoidance}
+\end{figure}
 
-\subsection{detect\_white.py \& detect\_red.py（阶段四）}
-无人机到达目标区域后的递进侦查：
+\subsection{detect\_white.py \& detect\_red.py（阶段四：目标识别与精准定位）}
+
+无人机抵达目标区域后，启动递进式协同侦查机制，由两个并行线程协同完成：目标识别线程负责感知与定位，UAV 控制线程负责执行差异化追踪策略。系统根据目标类型（可移动的健康人员 vs. 静止的危重伤员）自动切换控制逻辑。
+
+
+\subsubsection{目标识别线程（感知与定位）}
 \begin{itemize}
-    \item \textbf{目标识别线程：}
-    \begin{itemize}
-        \item 保存遥感图像和飞机位姿信息
-        \item 使用YOLOv8模型进行目标标注
-        \item 通过遥感视线模型计算目标位置
-        \item 误差修正和数据同步
-    \end{itemize}
-    \item \textbf{UAV控制线程：}
-    \begin{itemize}
-        \item \textbf{健康人员（动态目标）:}
-        \begin{itemize}
-            \item SEARCHING: 移动到目标位置并下降
-            \item MODELING: 采样并拟合运动轨迹
-            \item INTERCEPTING: 移动到拦截点上方
-            \item DESCENDING\_TO\_WAIT: 下降到0.7米
-            \item WAITING\_FOR\_TARGET: 等待目标通过并发布坐标
-        \end{itemize}
-        \item \textbf{重伤人员（静态目标）:}
-        \begin{itemize}
-            \item SEARCHING: 微调至目标正上方
-            \item ALIGNING: 下降一段距离
-            \item 重复直到下降到0.5米高度发布坐标
-        \end{itemize}
-    \end{itemize}
+    \item 实时保存高分辨率遥感图像及对应的无人机位姿（位置与姿态）信息；
+    \item 基于 YOLOv8 目标检测模型对图像中的人员进行实时标注与分类（白色标识健康人员，红色标识危重伤员）；
+    \item 结合遥感视线几何模型，将图像像素坐标反投影至地面坐标系，计算目标的初始地理坐标；
+    \item 引入误差补偿机制（如相机畸变校正、姿态抖动滤波），并对感知数据与控制指令进行时间同步，确保定位精度。
 \end{itemize}
+
+\subsubsection{UAV 控制线程（差异化追踪策略）}
+\begin{itemize}
+    \item \textbf{健康人员（动态目标）——采用“运动预测主动拦截”策略}
+        \begin{itemize}
+            \item \texttt{SEARCHING}：飞抵目标初始估计位置并悬停，启动视觉跟踪；
+            \item \texttt{MODELING}：持续采样目标运动轨迹，利用最小二乘或卡尔曼滤波拟合其速度与方向模型；
+            \item \texttt{INTERCEPTING}：基于预测模型，主动计算最优拦截点，并前出机动至该点上空；
+            \item \texttt{DESCENDING\_TO\_WAIT}：在拦截点上方平稳下降至 0.7 米安全悬停高度；
+            \item \texttt{WAITING\_FOR\_TARGET}：保持悬停，等待目标进入视野中心，确认后发布高精度坐标。
+        \end{itemize}
+        流程状态图如图~\ref{fig:dynamic_target_tracking}：
+
+    \item \textbf{危重伤员（静态目标）——采用“视觉伺服复合式下降”策略}
+        \begin{itemize}
+            \item \texttt{SEARCHING}：在目标初始位置上方悬停，通过视觉反馈水平微调，使目标精确对准图像中心；
+            \item \texttt{ALIGNING}：沿竖直方向下降一段距离（如 2 米），再次进行水平对准；
+            \item 重复“微调–下降”闭环，逐步逼近目标，直至无人机稳定悬停于 0.5 米高度；
+            \item 最终确认目标位于视野中心后，发布厘米级精度的定位坐标。
+        \end{itemize}
+        流程状态图如图~\ref{fig:static_target_tracking}：
+
+    \begin{figure}[htbp]
+        \centering
+        \begin{minipage}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{./resources/静态反转色.png}
+            \caption{静态目标追踪状态图}
+            \label{fig:static_target_tracking}
+        \end{minipage}
+        \hfill
+        \begin{minipage}{0.48\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{./resources/动态反转色.png}
+            \caption{动态目标追踪状态图}
+            \label{fig:dynamic_target_tracking}
+        \end{minipage}
+    \end{figure}
+\end{itemize}
+
+该设计实现了对静态与动态目标的自适应、高鲁棒性定位：静态目标强调垂直逼近的稳定性与精度，
+动态目标则突出预测能力与主动拦截的智能性，显著提升了复杂搜救场景下的任务成功率。
 
 % 8. 关键代码及注释
 \section{关键代码及注释}
+
 详见各脚本文件源代码（因篇幅限制，此处省略具体代码）
 
 % 9. 创新点
 \section{创新点}
-\subsection{异构双机协同任务规划与GNC一体化设计}
+\subsection{异构双机协同任务规划与状态决策一体化设计}
 \begin{itemize}
     \item 构建VTOL与四旋翼高效协同架构
     \item 设计任务分配与信息流交接机制
-    \item 实现任务规划与GNC系统一体化设计
+    \item 实现任务规划与追踪系统一体化设计
     \begin{itemize}
         \item 状态机负责顶层任务决策
         \item 通过MAVROS接口转化为PX4飞控指令
@@ -392,25 +557,16 @@
     \item 构建鲁棒坐标解算流程：
     \begin{itemize}
         \item 基于相机针孔模型反投影
-        \item 使用message\_filters进行时空同步
+        \item 使用消息队列进行时空同步
     \end{itemize}
 \end{itemize}
 
-\subsection{路径规划与目标追踪控制}
-针对不同类型目标设计差异化策略：
+\subsection{实现任务规划与导航控制系统}
 \begin{itemize}
-    \item \textbf{静态目标（危重人员）:}
-    \begin{itemize}
-        \item 基于位置的视觉伺服控制
-        \item 高频视觉反馈循环修正水平误差
-        \item "对准-下降"复合式降落
-    \end{itemize}
-    \item \textbf{动态目标（健康人员）:}
-    \begin{itemize}
-        \item "在线建模-预测-拦截"智能决策
-        \item 轨迹数据采集与最小二乘拟合
-        \item 运动模型预测最佳拦截点
-    \end{itemize}
+    \item 状态机负责顶层任务决策
+    \item 将无人机起飞、解锁、悬停、移动等基本操作封装
+    \item 对于固定翼发布坐标话题控制，实现目标的快速接近
+    \item 对于四旋翼发布速度话题实现精确飞行控制
 \end{itemize}
 
 \subsection{高效的任务开发与自动化验证流程}
@@ -460,6 +616,39 @@ cd ~/catkin_ws/src/offboard_run/scripts
     \begin{lstlisting}[language=bash]
     sudo apt-get install ros-<distro>-gazebo-msgs
     \end{lstlisting}
+\end{itemize}
+
+\subsection{测试报告}
+详见\textbf{测试报告.pdf}。
+
+本项目采用团队自编脚本进行自动化测试，测试结果如下：
+
+\begin{itemize}
+    \item \textbf{安全性：} VTOL 和四旋翼无人机均未进入禁飞区。
+    \item \textbf{目标识别（VTOL）：}
+    \begin{itemize}
+        \item 重伤人员：9.89 / 10.0
+        \item 轻伤人员：9.71 / 10.0
+        \item 健康人员：9.36 / 10.0
+    \end{itemize}
+    \item \textbf{重伤人员定位与信息发布：}
+    \begin{itemize}
+        \item 成功抵达重伤人员位置，在垂直距离 $\leq$ 0.5m 时发布坐标
+        \item 得分：29.42 / 30.0
+    \end{itemize}
+    \item \textbf{健康人员定位与信息发布：}
+    \begin{itemize}
+        \item 成功抵达健康人员位置，在垂直距离 $\leq$ 0.7m 时发布坐标
+        \item 得分：9.06 / 10.0
+    \end{itemize}
+    \item \textbf{任务完成：} VTOL 以固定翼模式完成任务考察，VTOL 和四旋翼均能安全返航并锁桨。
+\end{itemize}
+
+\noindent
+\textbf{测试说明：}
+\begin{itemize}
+    \item 阶段一结果取 10 次测试结果平均
+    \item 阶段二结果取 5 次测试结果平均
 \end{itemize}
 
 \end{document}

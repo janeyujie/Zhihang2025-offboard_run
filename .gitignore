@@ -7,3 +7,4 @@ script/__pycache__
 *.fls
 *.xdv
 *.gz
+*.out
